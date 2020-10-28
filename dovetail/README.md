@@ -1,6 +1,6 @@
 # Build and deploy Dovetail flows
 
-When [Dovetail](https://github.com/dovetail-lab/fabric-samples) is used to develop chaincode and client apps for Hyperledger Fabric, the Flogo flows can be built and deployed to Kubernetes locally or in cloud using scripts in this section.
+When [Dovetail](https://github.com/dovetail-lab/dovetail) is used to develop chaincode and client apps for Hyperledger Fabric, the Flogo flows can be built and deployed to Kubernetes locally or in cloud using scripts in this section.
 
 ## Build chaincode flow in cloud
 

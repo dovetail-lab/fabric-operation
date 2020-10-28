@@ -4,7 +4,7 @@ This package contains scripts that let you define, create, and test a Hyperledge
 
 The scripts support both `docker-compose` and `kubernetes`. All steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
 
-This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric applications developed in [dovetail](../dovetail/README.md), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
+This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric applications developed in [dovetail](https://github.com/dovetail-lab/dovetail), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ rm -R ../netop1.com/canet
 ./ca-crypto.sh bootstrap
 ```
 
-You can edit the network specification [netop1.env](./config/netop1.env) if you want to use a different operating company name, or make it run more orderer or peer nodes. The generated crypto data will be stored in the folder [netop1.com](./netop1.com) on localhost, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore.
+You can edit the network specification [netop1.env](./config/netop1.env) if you want to use a different operating company name, or make it run more orderer or peer nodes. The generated crypto data will be stored in the local folder `/path/to/dovetail-lab/fabric-operation/netop1.com/netop1.com`, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore.
 
 These scripts take 2 additional parameters, e.g.,
 
