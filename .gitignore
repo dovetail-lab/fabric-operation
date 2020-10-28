@@ -1,0 +1,7 @@
+**/.DS_Store
+aws/config/
+az/config/
+gcp/config/
+**/*.sh-e
+**/TIB_flogo*
+netop1.com/

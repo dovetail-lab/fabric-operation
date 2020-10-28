@@ -1,27 +1,27 @@
-# operation
+# fabric-operation
 
-This section contains scripts that let you define, create, and test a Hyperledger Fabric network in Kubernetes locally or in a cloud.  Supported cloud services include AWS, Azure, and Google Cloud.  The fabric network parameters can be specified by a property file, e.g., the sample network, [netop1.env](./config/netop1.env).
+This package contains scripts that let you define, create, and test a Hyperledger Fabric network in Kubernetes locally or in a cloud. Supported cloud services include AWS, Azure, and Google Cloud. The fabric network parameters can be specified by a property file, e.g., the sample network, [netop1.env](./config/netop1.env).
 
-The scripts support both `docker-compose` and `kubernetes`.  All steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
+The scripts support both `docker-compose` and `kubernetes`. All steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
 
 This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework.
 
 ## Prerequisites
 
-* Your workstation must support `bash` shell scripts.
-* If you want to create and test a Fabric network on local host, you need to install docker-compose and/or kubernetes locally, i.e.,
-  * Install Docker and Docker Compose as described [here](https://docs.docker.com/compose/install/).
-  * Mac user can enable kubernetes as described [here](https://docs.docker.com/docker-for-mac/#kubernetes).
-  * The scripts are not tested with [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/), although they may work without much change.
-* If you want to create and test a Fabric network in a cloud, you would not need to download anything except a `CLI` required to access the corresponding cloud service.  We currently support Amazon EKS, Azure AKS, and Google GKE.  Other cloud services may be supported in the future.
+- Your workstation must support `bash` shell scripts.
+- If you want to create and test a Fabric network on local host, you need to install docker-compose and/or kubernetes locally, i.e.,
+  - Install Docker and Docker Compose as described [here](https://docs.docker.com/compose/install/).
+  - Mac user can enable kubernetes as described [here](https://docs.docker.com/docker-for-mac/#kubernetes).
+  - The scripts are not tested with [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/), although they may work without much change.
+- If you want to create and test a Fabric network in a cloud, you would not need to download anything except a `CLI` required to access the corresponding cloud service. We currently support Amazon EKS, Azure AKS, and Google GKE. Other cloud services may be supported in the future.
 
-  * For AWS, refer the scripts and instructions in the [aws folder](./aws).
-  * For Azure, refer the scripts and instructions in the [az folder](./az).
-  * For Google cloud, refer the scripts and instructions in the [gcp folder](./gcp)
+  - For AWS, refer the scripts and instructions in the [aws folder](./aws).
+  - For Azure, refer the scripts and instructions in the [az folder](./az).
+  - For Google cloud, refer the scripts and instructions in the [gcp folder](./gcp)
 
 ## Prepare Kubernetes namespace
 
-This step is necessary only if you use Kubernetes.  So, skip it when `docker-compose` is used.
+This step is necessary only if you use Kubernetes. So, skip it when `docker-compose` is used.
 
 ```bash
 cd ./namespace
@@ -49,7 +49,7 @@ rm -R ../netop1.com/canet
 ./ca-crypto.sh bootstrap
 ```
 
-You can edit the network specification [netop1.env](./config/netop1.env) if you want to use a different operating company name, or make it run more orderer or peer nodes.  The generated crypto data will be stored in the folder [netop1.com](./netop1.com) on localhost, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore.
+You can edit the network specification [netop1.env](./config/netop1.env) if you want to use a different operating company name, or make it run more orderer or peer nodes. The generated crypto data will be stored in the folder [netop1.com](./netop1.com) on localhost, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore.
 
 These scripts take 2 additional parameters, e.g.,
 
@@ -58,18 +58,18 @@ These scripts take 2 additional parameters, e.g.,
 ./ca-crypto.sh bootstrap -p <config_file> -t <env_type>
 ```
 
-where `config_file` is file in the [config](./config) folder with a suffix `.env` that contains the fabric network specification; `env_type` can be `k8s`, `docker`, `aws`, `az` or `gcp`.  When no parameter is specified, it uses default `-p netop1 -t k8s` on local PC.  Refer [ca](./ca) folder for more detailed description of these scripts.
+where `config_file` is file in the [config](./config) folder with a suffix `.env` that contains the fabric network specification; `env_type` can be `k8s`, `docker`, `aws`, `az` or `gcp`. When no parameter is specified, it uses default `-p netop1 -t k8s` on local PC. Refer [ca](./ca) folder for more detailed description of these scripts.
 
-* `k8s` uses the local `docker-desktop` kubernetes on Mac.  Non-Mac users may use `docker` option below, or try Minikube (which has not been tested).
-* `docker` uses `docker-compose`.
-* `aws` uses AWS EKS when executed on a `bastion` host of an EC2 instance.  Refer the folder [aws](./aws) for more details on AWS.
-* `az` uses Azure AKS when executed on a `bastion` VM instance in Azure.  Refer the folder [az](./az) for more details on Azure.
-More cloud support will be added in the future.
-* `gcp` uses Google GKE when executed on a `bastion` host in Google Cloud.  Refer the folder [gcp](./gcp) for more details on Google Cloud.
+- `k8s` uses the local `docker-desktop` kubernetes on Mac. Non-Mac users may use `docker` option below, or try Minikube (which has not been tested).
+- `docker` uses `docker-compose`.
+- `aws` uses AWS EKS when executed on a `bastion` host of an EC2 instance. Refer the folder [aws](./aws) for more details on AWS.
+- `az` uses Azure AKS when executed on a `bastion` VM instance in Azure. Refer the folder [az](./az) for more details on Azure.
+  More cloud support will be added in the future.
+- `gcp` uses Google GKE when executed on a `bastion` host in Google Cloud. Refer the folder [gcp](./gcp) for more details on Google Cloud.
 
 ## Sample crypto data
 
-When the above steps are executed on local PC, the crypto data will be stored in [netop1.com](./netop1.com/), which is specified by `FABRIC_ORG` in the network definition file [netop1.env](./config/netop1.env).  The resulting crypto data is similar to that generated by the fabric `cryptogen` tool as demonstrated by [fabric-samples](https://github.com/hyperledger/fabric-samples). However, by using a fabric CA server in the above step, the generated certificates will include a few extra attributes that would make them usable for cloud deployment using kubernetes, as well as attribute-based-access-control (ABAC).  Besides, CA server is also more flexible for generating certificates for more nodes and users in production environment as the network grows.  Although the CA servers use a self-signed root CA for simplicity, you may supply your real root CA for production deployment.
+When the above steps are executed on local PC, the crypto data will be stored in [netop1.com](./netop1.com/), which is specified by `FABRIC_ORG` in the network definition file [netop1.env](./config/netop1.env). The resulting crypto data is similar to that generated by the fabric `cryptogen` tool as demonstrated by [fabric-samples](https://github.com/hyperledger/fabric-samples). However, by using a fabric CA server in the above step, the generated certificates will include a few extra attributes that would make them usable for cloud deployment using kubernetes, as well as attribute-based-access-control (ABAC). Besides, CA server is also more flexible for generating certificates for more nodes and users in production environment as the network grows. Although the CA servers use a self-signed root CA for simplicity, you may supply your real root CA for production deployment.
 
 ## Generate MSP definition and genesis block
 
@@ -82,7 +82,7 @@ cd ../msp
 ./msp-util.sh bootstrap
 ```
 
-It also generates transactions for creating a test channel, `mychannel`.  Similar to other scripts, this command also accepts 2 parameters, e.g.,
+It also generates transactions for creating a test channel, `mychannel`. Similar to other scripts, this command also accepts 2 parameters, e.g.,
 
 ```bash
 ./msp-util.sh start -p <config_file> -t <env_type>
@@ -103,7 +103,7 @@ cd ./network
 ./network.sh shutdown
 ```
 
-After the network startup, use `kubectl logs orderer-2` to check RAFT leader election result.  When RAFT leader is elected, the log should show
+After the network startup, use `kubectl logs orderer-2` to check RAFT leader election result. When RAFT leader is elected, the log should show
 
 ```
 INFO 101 Raft leader changed: 0 -> 2 channel=netop1-channel node=2
@@ -130,15 +130,15 @@ cd ../service
 
 ## Operations for managing the Fabric network
 
-The above bootstrap network is for a single operating company to start a Fabric network with its own orderer and peer nodes of pre-configured size.  A network in production will need to scale up and let more organizations join and co-operate.  Organizations may create their own Kubernetes networks using the same or different cloud service providers. We provide scripts to support such network activities.
+The above bootstrap network is for a single operating company to start a Fabric network with its own orderer and peer nodes of pre-configured size. A network in production will need to scale up and let more organizations join and co-operate. Organizations may create their own Kubernetes networks using the same or different cloud service providers. We provide scripts to support such network activities.
 
 The currently supported operations include
 
-* Create and join new channel;
-* Install and instantiate new chaincode;
-* Add new peer nodes of the same bootstrap org;
-* Add new orderer nodes of the same bootstrap org;
-* Add new peer org to the same Kubernetes cluster;
+- Create and join new channel;
+- Install and instantiate new chaincode;
+- Add new peer nodes of the same bootstrap org;
+- Add new orderer nodes of the same bootstrap org;
+- Add new peer org to the same Kubernetes cluster;
 
 Refer [operations](./operations.md) for description of these activities. More operations (as described in `TODO` bellow) will be supported in the future.
 
@@ -146,11 +146,11 @@ Refer [operations](./operations.md) for description of these activities. More op
 
 If you are not using a Mac, you can run these scripts using `docker-compose`, `Amazon EKS`, `Azure AKS`, or `Google GKE`. Simply add a corresponding `env_type` in all the commands, e.g.,
 
-* `./ca-server.sh start -t docker` to use `docker-composer`, or
-* `./ca-server.sh start -t aws` to use AWS as described in the folder [aws](./aws), or
-* `./ca-server.sh start -t az` to use Azure as described in the folder [az](./az), or
-* `./ca-server.sh start -t gcp` to use Google Cloud as described in the folder [gcp](./gcp), or
-* try to verify if the scripts would work on [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
+- `./ca-server.sh start -t docker` to use `docker-composer`, or
+- `./ca-server.sh start -t aws` to use AWS as described in the folder [aws](./aws), or
+- `./ca-server.sh start -t az` to use Azure as described in the folder [az](./az), or
+- `./ca-server.sh start -t gcp` to use Google Cloud as described in the folder [gcp](./gcp), or
+- try to verify if the scripts would work on [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
 
 When `docker-compose` is used, generate artifacts and start and test the Fabric network using the following commands:
 
@@ -175,7 +175,7 @@ cd ../network
 
 Stay tuned for more updates on the following items:
 
-* Add new orderer org to the same bootstrap Kubernetes cluster for etcd raft consensus;
-* Add new orderer org in a different Kubernetes cluster;
-* Add new peer org in a different Kubernetes cluster;
-* Test multiple org multiple Kubernetes clusters across multiple cloud providers.
+- Add new orderer org to the same bootstrap Kubernetes cluster for etcd raft consensus;
+- Add new orderer org in a different Kubernetes cluster;
+- Add new peer org in a different Kubernetes cluster;
+- Test multiple org multiple Kubernetes clusters across multiple cloud providers.
