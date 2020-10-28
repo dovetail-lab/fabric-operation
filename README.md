@@ -4,7 +4,7 @@ This package contains scripts that let you define, create, and test a Hyperledge
 
 The scripts support both `docker-compose` and `kubernetes`. All steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
 
-This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric application using [dovetail](../dovetail/README.md), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
+This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric applications developed in [dovetail](../dovetail/README.md), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
 
 ## Prerequisites
 
