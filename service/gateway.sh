@@ -457,7 +457,7 @@ function startGateway {
       if [ -f ${SCRIPT_DIR}/gateway-linux ]; then
         echo "copy gateway artifacts to ${DATA_ROOT}/gateway"
         ${sucp} ${SCRIPT_DIR}/gateway-linux ${DATA_ROOT}/gateway/gateway
-        ${sucp} ${SCRIPT_DIR}/src/fabric.proto ${DATA_ROOT}/gateway
+        ${sucp} ${SCRIPT_DIR}/src/proto/fabric/fabric.proto ${DATA_ROOT}/gateway
         ${sucp} -Rf ${SCRIPT_DIR}/swagger-ui ${DATA_ROOT}/gateway
       else
         echo "cannot find gateway executable 'gateway-linux'. Build it and then retry."

@@ -567,7 +567,7 @@ function buildFlogoChaincode {
     ${sucp} -rf ${_src}/META-INF ${DATA_ROOT}/tool/${name}
   fi
 
-  local cmd="build-cds.sh ${_model} ${name} ${VERSION}"
+  local cmd="fabric-cli/scripts/build-cds.sh ${_model} ${name} ${VERSION}"
   kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
   ${sumv} ${DATA_ROOT}/tool/${name}/${name}_${VERSION}.cds ${DATA_ROOT}/tool
   echo "chaincode package is built in folder ${DATA_ROOT}/tool"
@@ -592,7 +592,7 @@ function buildFlogoApp {
   ${sumd} -p ${DATA_ROOT}/tool/${name}
   ${sucp} ${MODEL} ${DATA_ROOT}/tool/${name}
 
-  cmd="build-client.sh ${_model} ${name} linux amd64"
+  cmd="fabric-cli/scripts/build-client.sh ${_model} ${name} linux amd64"
   kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
   ${sumv} ${DATA_ROOT}/tool/${name}/${name}_linux_amd64 ${DATA_ROOT}/tool
   echo "app executable is built in folder ${DATA_ROOT}/tool"

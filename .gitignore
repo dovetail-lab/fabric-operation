@@ -5,3 +5,4 @@ gcp/config/
 **/*.sh-e
 **/TIB_flogo*
 netop1.com/
+**/go.sum

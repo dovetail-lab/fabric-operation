@@ -84,6 +84,7 @@ echo "clone dovetail and set filesystem id ${AWS_FSID}"
 git clone https://github.com/dovetail-lab/fabric-operation.git
 sed -i -e "s|^MOUNT_POINT=.*|MOUNT_POINT=${MOUNT_POINT}|" ./fabric-operation/config/setup.sh
 sed -i -e "s|^AWS_FSID=.*|AWS_FSID=${AWS_FSID}|" ./fabric-operation/config/setup.sh
+git clone https://github.com/dovetail-lab/fabric-cli.git
 
 go get -u github.com/project-flogo/cli/...
 

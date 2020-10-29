@@ -22,8 +22,9 @@ func SetConfig(configPath, patternPath, channel, user, org string) {
 	}
 }
 
-// Service implements audit.AuditServiceServer interface
+// Service implements fabric.GatewayServer interface
 type Service struct {
+	UnimplementedGatewayServer
 }
 
 // Connect creates a Fabric connection, or finds a cached connection matching the channel and user/org.

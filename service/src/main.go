@@ -18,9 +18,10 @@ import (
 
 	"github.com/dovetail-lab/fabric-operation/service/fabric"
 
-	"github.com/grpc-ecosystem/grpc-gateway/runtime"
-	context "golang.org/x/net/context"
-	grpc "google.golang.org/grpc"
+	"context"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"google.golang.org/grpc"
 )
 
 // Command-line args to be provided at start of the gateway service

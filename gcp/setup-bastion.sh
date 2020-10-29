@@ -60,6 +60,7 @@ echo "setup dovetail"
 git clone https://github.com/dovetail-lab/fabric-operation.git
 sed -i -e "s|^MOUNT_POINT=.*|MOUNT_POINT=${mnt_point}|" ./fabric-operation/config/setup.sh
 sed -i -e "s|^GCP_STORE_IP=.*|GCP_STORE_IP=${STORE_IP}|" ./fabric-operation/config/setup.sh
+git clone https://github.com/dovetail-lab/fabric-cli.git
 
 go get -u github.com/project-flogo/cli/...
 

@@ -81,6 +81,7 @@ echo "setup dovetail"
 git clone https://github.com/dovetail-lab/fabric-operation.git
 sed -i -e "s|^MOUNT_POINT=.*|MOUNT_POINT=${mnt_point}|" ./fabric-operation/config/setup.sh
 sed -i -e "s|^AZ_STORAGE_SHARE=.*|AZ_STORAGE_SHARE=${STORAGE_SHARE}|" ./fabric-operation/config/setup.sh
+git clone https://github.com/dovetail-lab/fabric-cli.git
 
 go get -u github.com/project-flogo/cli/...
 

@@ -15,7 +15,7 @@ build: codegen
 dist: gateway-linux
 	rm -rf $(DEPLOY_PATH)/gateway
 	cp gateway-linux $(DEPLOY_PATH)/gateway
-	cp src/fabric.proto $(DEPLOY_PATH)
+	cp src/proto/fabric/fabric.proto $(DEPLOY_PATH)
 	cp -Rf swagger-ui $(DEPLOY_PATH)
 
 .PHONY: run
@@ -24,21 +24,24 @@ run:
 
 .PHONY: codegen
 codegen:
-	protoc -I=./src \
-		-I=$(GOPATH)/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--go_out=plugins=grpc:./src/fabric \
-		./src/fabric.proto
-	protoc -I=./src \
-		-I=$(GOPATH)/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--grpc-gateway_out=logtostderr=true:./src/fabric \
-		./src/fabric.proto
-	protoc -I=./src \
-		-I=$(GOPATH)/src/github.com/grpc-ecosystem/grpc-gateway/third_party/googleapis \
-		--swagger_out=logtostderr=true:./swagger-ui \
-		./src/fabric.proto
+	protoc -I=./src/proto \
+		--go_out ./src --go_opt paths=source_relative \
+		--go-grpc_out ./src --go-grpc_opt paths=source_relative \
+		./src/proto/fabric/fabric.proto
+	protoc -I=./src/proto \
+		--grpc-gateway_out ./src \
+		--grpc-gateway_opt logtostderr=true \
+		--grpc-gateway_opt paths=source_relative \
+		./src/proto/fabric/fabric.proto
+	protoc -I=./src/proto --openapiv2_out ./src \
+		--openapiv2_opt logtostderr=true \
+		./src/proto/fabric/fabric.proto
+	-cp src/fabric/fabric.swagger.json swagger-ui
 
-.PHONY: depend
-depend:
-	go get -u github.com/golang/protobuf/protoc-gen-go
-	go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-	go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
+.PHONY: tools
+tools:
+	cd tools && go install \
+		github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway \
+		github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2 \
+		google.golang.org/protobuf/cmd/protoc-gen-go \
+		google.golang.org/grpc/cmd/protoc-gen-go-grpc

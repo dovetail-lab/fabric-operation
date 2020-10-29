@@ -1,15 +1,16 @@
 module github.com/dovetail-lab/fabric-operation/service
 
-go 1.12
+go 1.14
 
 require (
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
-	github.com/golang/protobuf v1.3.3
-	github.com/grpc-ecosystem/grpc-gateway v1.13.0
-	github.com/hyperledger/fabric-sdk-go v1.0.0-beta1
+	github.com/golang/protobuf v1.4.3
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.0.1
+	github.com/hyperledger/fabric-sdk-go v1.0.0-beta3
 	github.com/pkg/errors v0.9.1
-	github.com/stretchr/testify v1.5.1
-	golang.org/x/net v0.0.0-20200219183655-46282727080f
-	google.golang.org/genproto v0.0.0-20200218151345-dad8c97a84f5
-	google.golang.org/grpc v1.27.1
+	github.com/stretchr/testify v1.6.1
+	golang.org/x/net v0.0.0-20201027133719-8eef5233e2a1 // indirect
+	google.golang.org/genproto v0.0.0-20201028140639-c77dae4b0522
+	google.golang.org/grpc v1.33.1
+	google.golang.org/protobuf v1.25.0
 )

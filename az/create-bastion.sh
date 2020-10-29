@@ -33,6 +33,8 @@ pubip=$(az vm list-ip-addresses -n ${BASTION_HOST} -g ${RESOURCE_GROUP} --query 
 sed -i -e "s/^export BASTION_IP=.*/export BASTION_IP=${pubip}/" ./env.sh
 
 # setup bastion host
+echo "copy config files to bastion host ${BASTION_USER}@${pubip}"
+chmod +r ./config/config-${ENV_NAME}.yaml
 scp -q -o "StrictHostKeyChecking no" ./config/config-${ENV_NAME}.yaml ${BASTION_USER}@${pubip}:config.yaml
 scp -q -o "StrictHostKeyChecking no" ./config/env.sh ${BASTION_USER}@${pubip}:env.sh
 scp -q -o "StrictHostKeyChecking no" ./setup-bastion.sh ${BASTION_USER}@${pubip}:setup.sh
@@ -40,6 +42,7 @@ scp -q -o "StrictHostKeyChecking no" ./setup-bastion.sh ${BASTION_USER}@${pubip}
 if [ "${check}" == "Succeeded" ]; then
   echo "skip setup for existing bastion host"
 else
+  echo "execute setup.sh on bastion host ${BASTION_USER}@${pubip}"
 ssh -o "StrictHostKeyChecking no" ${BASTION_USER}@${pubip} << EOF
   ./setup.sh
 EOF

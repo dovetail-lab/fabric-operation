@@ -73,7 +73,7 @@ Following steps will start and smoke test the default Hyperledger Fabric network
 ### Create namespace for the network operator
 
 ```bash
-cd ../namespace
+cd fabric-operation/namespace
 ./k8s-namespace.sh create
 ```
 
@@ -175,7 +175,7 @@ It will return a `connection_id`: `16453564131388984820`.
 
 ### Build and start Dovetail chaincode and service
 
-Refer [dovetail](../dovetail/README.md) for more details about [Project Dovetail](https://github.com/dovetail-lab/fabric-samples), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps.
+Refer [dovetail](../dovetail/README.md) for more details about [Project Dovetail](https://github.com/dovetail-lab/dovetail), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps.
 
 A Dovetail chaincode model, e.g., [marble.json](../dovetail/samples/marble/marble.json) is a JSON file that implements a sample chaincode by using the [TIBCO Flogo](https://docs.tibco.com/products/tibco-flogo-enterprise-2-10-0) visual modeler. Use the following script to build and instantiate the chaincode.
 
