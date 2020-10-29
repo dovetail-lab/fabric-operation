@@ -21,7 +21,7 @@ This utility is implemented using bash scripts, and thus it does not depend on a
 
 ## Prepare Kubernetes namespace
 
-This step is necessary only if you use Kubernetes. So, skip it when `docker-compose` is used.
+This step assumes that you use Kubernetes of the `Docker Desktop` on Mac. If you plan to use `docker-compose`, skip to the end of this instruction on [Non-Mac Users](#non-mac-users).
 
 ```bash
 cd ./namespace
