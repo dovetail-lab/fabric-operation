@@ -4,17 +4,13 @@ The gateway service is a generic Fabric client service that provides REST and gR
 
 ## Build gateway service
 
-If you use a cloud provider, i.e., `AWS`, `Azure`, or `GCP`, you can use a `bastion` host to build and test the gateway service, and thus you do not need to install anything on your local PC.  Scripts are provided to setup the `bastion` host for each of the supported cloud providers.  Refer to the folder for [AWS](../aws), [Azure](../az), or [GCP](../gcp) for more details.
+If you use a cloud provider, i.e., `AWS`, `Azure`, or `GCP`, you can use a `bastion` host to build and test the gateway service, and thus you do not need to install anything on your local PC. Scripts are provided to setup the `bastion` host for each of the supported cloud providers. Refer to the folder for [AWS](../aws), [Azure](../az), or [GCP](../gcp) for more details.
 
-For local test, the gateway service is already pre-built for Mac and Linux as `gateway-darwin` and `gateway-linux`.  You may also build the service from source code, but you need to install the following prerequisites:
-
-* Download and install Go as described [here](https://golang.org/dl/)
-* Download and install `protoc` as described [here](https://grpc.io/docs/quickstart/go/)
-* Install protobuff plugin for REST over gRPC as described [here](https://github.com/grpc-ecosystem/grpc-gateway) i.e.,
+For local test, the gateway service is already pre-built for Mac and Linux as `gateway-darwin` and `gateway-linux`. You may also build the service from source code, but you need to install the [Golang](https://golang.org/dl/), and then install other tools by using the [Makefile](./Makefile), i.e.,
 
 ```bash
-go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-go get -u github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger
+cd ../service
+make tools
 ```
 
 You can then build the gateway service using the [Makefile](./Makefile), i.e.,
@@ -52,7 +48,7 @@ cd ../service
 ./gateway.sh start
 ```
 
-On a Mac, this gateway service listens to REST requests on a `NodePort`: `30081`.  You can also run the service on a cloud provider.  The scripts support [AWS](../aws), [Azure](../az), and [GCP](../gcp).  Click one of the links to see how easy it is to start a Hyperledger Fabric network in the cloud, and expose the blockchain as a public service via this `gateway service`.
+On a Mac, this gateway service listens to REST requests on a `NodePort`: `30081`. You can also run the service on a cloud provider. The scripts support [AWS](../aws), [Azure](../az), and [GCP](../gcp). Click one of the links to see how easy it is to start a Hyperledger Fabric network in the cloud, and expose the blockchain as a public service via this `gateway service`.
 
 If you want to use this service to test chaincode deployed on a local `byfn` network (in the fabric-samples), you can also run the service without Kubernetes, i.e.,
 
@@ -67,8 +63,8 @@ Open the Swagger UI in Chrome web-browser: [http://localhost:30081/swagger](http
 
 It defines 2 REST APIs:
 
-* **Connection**, which creates or finds a Fabric network connection, and returns the connection-ID.
-* **Transaction**, which invokes a Fabric transaction for query or invocation on a specified or randomly chosen endpoint.
+- **Connection**, which creates or finds a Fabric network connection, and returns the connection-ID.
+- **Transaction**, which invokes a Fabric transaction for query or invocation on a specified or randomly chosen endpoint.
 
 Click `Try it out` for `/v1/connection`, and execute the following request
 
@@ -90,9 +86,7 @@ Click `Try it out` for `/v1/transaction`, and execute the following query
   "type": "QUERY",
   "chaincode_id": "mycc",
   "transaction": "query",
-  "parameter": [
-    "a"
-  ]
+  "parameter": ["a"]
 }
 ```
 
@@ -106,17 +100,15 @@ Click `Try it out` for `/v1/transaction` again, and execute the following transa
   "type": "INVOKE",
   "chaincode_id": "mycc",
   "transaction": "invoke",
-  "parameter": [
-    "a","b","10"
-  ]
+  "parameter": ["a", "b", "10"]
 }
 ```
 
 Execute the above query again, it should return a reduced value of `a`, e.g., `80`.
 
-Note that this gateway service can be used to test any instantiated chaincode, and it supports connections to multiple channels or networks, as long as the connection is configured by using the script `./gateway.sh config [options]`.  You can also use a gRPC client to send API requests to the gateway service.
+Note that this gateway service can be used to test any instantiated chaincode, and it supports connections to multiple channels or networks, as long as the connection is configured by using the script `./gateway.sh config [options]`. You can also use a gRPC client to send API requests to the gateway service.
 
 ## TODO
 
-* Support HTTPS and gRPCs for secure client connections.
-* Demonstrate gRPCs client app.
+- Support HTTPS and gRPCs for secure client connections.
+- Demonstrate gRPCs client app.
