@@ -1331,17 +1331,6 @@ function invokeChaincode {
   execUtil "${CMD} ${CHANNEL_ID} ${CC_NAME} '${PARAM}' \"${peerParams}\""
 }
 
-function smokeTest {
-  # copy test chaincode
-  copyChaincode "chaincode_example02"
-
-  # copy channel tx
-  copyChannelTx ${TEST_CHANNEL}
-
-  # run smoke test
-  execUtil "test"
-}
-
 # Print the usage message
 function printHelp() {
   echo "Configure and start Hyperledger Fabric network"

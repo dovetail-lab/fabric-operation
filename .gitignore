@@ -9,3 +9,4 @@ orderer.example.com/
 org1.example.com/
 org2.example.com/
 **/go.sum
+**/log.txt
