@@ -1350,7 +1350,6 @@ function printHelp() {
   echo "    <cmd> - one of the following commands:"
   echo "      - 'start' - start orderers and peers of the fabric network, arguments: [-o <orderer-org>] [-p <peer-org>] [-t <env-type>]"
   echo "      - 'shutdown' - shutdown orderers and peers of the fabric network, arguments: [-o <orderer-org>] [-p <peer-org>] [-t <env-type>] [-d]"
-  echo "      - 'test' - run smoke test"
   echo "      - 'scale-peer' - scale up peer nodes with argument '-r <replicas>'"
   echo "      - 'scale-orderer' - scale up orderer nodes (RAFT consenter only one at a time)"
   echo "      - 'create-channel' - create a channel using a peer-org's cli, with argument: -c <channel>"
@@ -1506,10 +1505,6 @@ shutdown)
   else
     shutdownK8sNetwork
   fi
-  ;;
-test)
-  echo "smoke test fabric network: ${ORDERER_ENV} ${ENV_TYPE}"
-  smokeTest
   ;;
 scale-peer)
   echo "scale up peer nodes: ${REPLICA}"
