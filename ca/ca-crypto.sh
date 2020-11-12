@@ -7,8 +7,8 @@
 # generate crypto keys using CA server of a specified org, and ca server env, i.e., docker or k8s
 # ca-crypto.sh <cmd> [-p <property file>] [-t <env type>] [-s <start seq>] [-e <end seq>] [-u <user name>]
 # where property file for the org are specified in ../config/org_name.env, e.g.
-#   ca-crypto.sh bootstrap -p netop1
-# use config parameters specified in ../config/netop1.env
+#   ca-crypto.sh bootstrap -p org1
+# use config parameters specified in ../config/org1.env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 
@@ -84,7 +84,7 @@ function printHelp {
   echo "      - 'peer' - generate crypto for specified peers"
   echo "      - 'admin' - generate crypto for specified admin users"
   echo "      - 'user' - generate crypto for specified client users"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., org1 (default)"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -s <start seq> - start sequence number (inclusive) for orderer or peer"
   echo "    -e <end seq> - end sequence number (exclusive) for orderer or peer"
@@ -92,10 +92,12 @@ function printHelp {
   echo "  ca-crypto.sh -h (print this message)"
 }
 
-ORG_ENV="netop1"
+ORG_ENV="org1"
 
 CMD=${1}
-shift
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
 while getopts "h?p:t:s:e:u:" opt; do
   case "$opt" in
   h | \?)

@@ -10,6 +10,7 @@
 # to display usage info
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
+PEER_MSPS=()
 
 # e.g., getHostUrl peer-1
 function getHostUrl {
@@ -34,43 +35,41 @@ function getOrderers {
   done
 }
 
-# set list of peers from config
-function getPeers {
-  PEERS=()
-  seq=${PEER_MIN:-"0"}
-  max=${PEER_MAX:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    PEERS+=("peer-${seq}")
-    seq=$((${seq}+1))
-  done
-}
-
 function printOrdererMSP {
-  if [ "${#ORDERERS[@]}" -gt "0" ]; then
-    echo "
-    - &${ORDERER_MSP}
-        Name: ${ORDERER_MSP}
-        ID: ${ORDERER_MSP}
-        MSPDir: /etc/hyperledger/tool/crypto/msp
-        Policies:
-            Readers:
-                Type: Signature
-                Rule: \"OR('${ORDERER_MSP}.member')\"
-            Writers:
-                Type: Signature
-                Rule: \"OR('${ORDERER_MSP}.member')\"
-            Admins:
-                Type: Signature
-                Rule: \"OR('${ORDERER_MSP}.admin')\""
-  fi
-}
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
 
-function printPeerMSP {
   echo "
     - &${ORG_MSP}
         Name: ${ORG_MSP}
         ID: ${ORG_MSP}
         MSPDir: /etc/hyperledger/tool/crypto/msp
+        Policies:
+            Readers:
+                Type: Signature
+                Rule: \"OR('${ORG_MSP}.member')\"
+            Writers:
+                Type: Signature
+                Rule: \"OR('${ORG_MSP}.member')\"
+            Admins:
+                Type: Signature
+                Rule: \"OR('${ORG_MSP}.admin')\"
+        OrdererEndpoints:"
+  for ord in "${ORDERERS[@]}"; do
+    echo "            - $(getHostUrl ${ord}):7050"
+  done
+}
+
+# printPeerMSP <org_name>
+# printPeerMSP org1
+function printPeerMSP {
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${1} ${ENV_TYPE}
+  PEER_MSPS+=(${ORG_MSP})
+
+  echo "
+    - &${ORG_MSP}
+        Name: ${ORG_MSP}
+        ID: ${ORG_MSP}
+        MSPDir: /etc/hyperledger/tool/crypto/${ORG}
         Policies:
             Readers:
                 Type: Signature
@@ -80,30 +79,24 @@ function printPeerMSP {
                 Rule: \"OR('${ORG_MSP}.admin', '${ORG_MSP}.client')\"
             Admins:
                 Type: Signature
-                Rule: \"OR('${ORG_MSP}.admin')\""
-  if [ "${#PEERS[@]}" -gt "0" ]; then
-    echo "
+                Rule: \"OR('${ORG_MSP}.admin')\"
+            Endorsement:
+                Type: Signature
+                Rule: \"OR('${ORG_MSP}.peer')\"
         AnchorPeers:
-            - Host: $(getHostUrl ${PEERS[0]})
+            - Host: $(getHostUrl peer-0)
               Port: 7051"
-  fi
 }
 
 function printCapabilities {
   echo "
 Capabilities:
     Channel: &ChannelCapabilities
-        V1_4_3: true
-        V1_3: false
-        V1_1: false
+        V2_0: true
     Orderer: &OrdererCapabilities
-        V1_4_2: true
-        V1_1: false
+        V2_0: true
     Application: &ApplicationCapabilities
-        V1_4_2: true
-        V1_3: false
-        V1_2: false
-        V1_1: false"
+        V2_0: true"
 }
 
 function printApplicationDefaults {
@@ -120,19 +113,34 @@ Application: &ApplicationDefaults
         Admins:
             Type: ImplicitMeta
             Rule: \"MAJORITY Admins\"
+        LifecycleEndorsement:
+            Type: ImplicitMeta
+            Rule: \"MAJORITY Endorsement\"
+        Endorsement:
+            Type: ImplicitMeta
+            Rule: \"MAJORITY Endorsement\"
 
     Capabilities:
         <<: *ApplicationCapabilities"
 }
 
 function printOrdererDefaults {
-  if [ "${#ORDERERS[@]}" -gt "0" ]; then
-    echo "
+  echo "
 Orderer: &OrdererDefaults
-    OrdererType: solo
-    Addresses:
-        - $(getHostUrl ${ORDERERS[0]}):7050
-    BatchTimeout: 2s
+    OrdererType: etcdraft
+    Addresses:"
+  for ord in "${ORDERERS[@]}"; do
+    echo "        - $(getHostUrl ${ord}):7050"
+  done
+  echo "    EtcdRaft:
+        Consenters:"
+  for ord in "${ORDERERS[@]}"; do
+    echo "        - Host: $(getHostUrl ${ord})
+          Port: 7050
+          ClientTLSCert: /etc/hyperledger/tool/crypto/orderers/${ord}/tls/server.crt
+          ServerTLSCert: /etc/hyperledger/tool/crypto/orderers/${ord}/tls/server.crt"
+  done
+  echo "    BatchTimeout: 2s
     BatchSize:
         MaxMessageCount: 10
         AbsoluteMaxBytes: 99 MB
@@ -152,7 +160,6 @@ Orderer: &OrdererDefaults
         BlockValidation:
             Type: ImplicitMeta
             Rule: \"ANY Writers\""
-  fi
 }
 
 function printChannelDefaults {
@@ -172,113 +179,68 @@ Channel: &ChannelDefaults
         <<: *ChannelCapabilities"
 }
 
-function printOrgConsortium {
+function printOrdererGenesisProfile {
   echo "
-        Consortiums:
-            ${ORG}Consortium:
-                Organizations:
-                    - *${ORG_MSP}"
-}
-
-function printSoloOrdererProfile {
-  if [ "${#ORDERERS[@]}" -gt "0" ]; then
-    echo "
-    soloOrdererGenesis:
+    AppOrdererGenesis:
         <<: *ChannelDefaults
         Orderer:
             <<: *OrdererDefaults
-            Organizations:
-                - *${ORDERER_MSP}
-            Capabilities:
-                <<: *OrdererCapabilities"
-    printOrgConsortium
-  fi
-}
-
-function printEtcdraftOrdererProfile {
-  if [ "${#ORDERERS[@]}" -gt "0" ]; then
-    echo "
-    etcdraftOrdererGenesis:
-        <<: *ChannelDefaults
-        Capabilities:
-            <<: *ChannelCapabilities
-        Orderer:
-            <<: *OrdererDefaults
-            OrdererType: etcdraft
-            EtcdRaft:
-                Consenters:"
-    for ord in "${ORDERERS[@]}"; do
-      echo "                - Host: $(getHostUrl ${ord})
-                  Port: 7050
-                  ClientTLSCert: /etc/hyperledger/tool/crypto/orderers/${ord}/tls/server.crt
-                  ServerTLSCert: /etc/hyperledger/tool/crypto/orderers/${ord}/tls/server.crt"
-    done
-    echo "            Addresses:"
-    for ord in "${ORDERERS[@]}"; do
-      echo "                - $(getHostUrl ${ord}):7050"
-    done
-    echo "            Organizations:
-                - *${ORDERER_MSP}
-            Capabilities:
-                <<: *OrdererCapabilities
-        Application:
-            <<: *ApplicationDefaults
-            Organizations:
-            - <<: *${ORDERER_MSP}"
-    printOrgConsortium
-  fi
-}
-
-function printOrgChannelProfile {
-  echo "
-    ${ORG}Channel:
-        Consortium: ${ORG}Consortium
-        <<: *ChannelDefaults
-        Application:
-            <<: *ApplicationDefaults
             Organizations:
                 - *${ORG_MSP}
             Capabilities:
+                <<: *OrdererCapabilities
+        Consortiums:
+            AppConsortium:
+                Organizations:"
+  for p in "${PEER_MSPS[@]}"; do
+    echo "                    - *$p"
+  done
+}
+
+function printChannelProfile {
+  echo "
+    AppChannel:
+        Consortium: AppConsortium
+        <<: *ChannelDefaults
+        Application:
+            <<: *ApplicationDefaults
+            Organizations:"
+  for p in "${PEER_MSPS[@]}"; do
+    echo "                - *$p"
+  done
+  echo "            Capabilities:
                 <<: *ApplicationCapabilities"
 }
 
 function printConfigTx {
   getOrderers
-  getPeers
 
   echo "---
 Organizations:"
-  if [ ${#ORDERERS[@]} -ne 0 ]; then
-    printOrdererMSP
-  fi
-  if [ ${#PEERS[@]} -ne 0 ]; then
-    printPeerMSP
-  fi
+  for p in "${PEER_ORGS[@]}"; do
+    printPeerMSP $p
+  done
+  printOrdererMSP
+
   printCapabilities
   printApplicationDefaults
-  if [ ${#ORDERERS[@]} -ne 0 ]; then
-    printOrdererDefaults
-  fi
+  printOrdererDefaults
   printChannelDefaults
 
   echo "
 Profiles:"
-  if [ ${#ORDERERS[@]} -ne 0 ]; then
-    printSoloOrdererProfile
-    printEtcdraftOrdererProfile
-  fi
-  if [ ${#PEERS[@]} -ne 0 ]; then
-    printOrgChannelProfile
-  fi
+  printOrdererGenesisProfile
+  printChannelProfile
 }
 
 function printDockerYaml {
+  local cn="tool.${FABRIC_ORG}"
   echo "version: '3.7'
 
 services:
-  tool:
-    container_name: tool
-    image: hyperledger/fabric-tools:${FAB_VERSION}
+  ${cn}:
+    container_name: ${cn}
+    image: yxuco/dovetail-tools:v1.2.0
     tty: true
     stdin_open: true
     environment:
@@ -289,7 +251,6 @@ services:
       - SYS_CHANNEL=${SYS_CHANNEL}
       - ORG=${ORG}
       - ORG_MSP=${ORG_MSP}
-      - ORDERER_TYPE=${ORDERER_TYPE}
       - TEST_CHANNEL=${TEST_CHANNEL}
       - FABRIC_ORG=${FABRIC_ORG}
     working_dir: /etc/hyperledger/tool
@@ -409,7 +370,7 @@ spec:
 
 function printK8sPod {
 #  local image="hyperledger/fabric-tools"
-  local image="yxuco/dovetail-tools:v1.0.0"
+  local image="yxuco/dovetail-tools:v1.2.0"
   echo "
 apiVersion: v1
 kind: Pod
@@ -434,8 +395,6 @@ spec:
       value: /etc/hyperledger/tool
     - name: CORE_VM_ENDPOINT
       value: unix:///host/var/run/docker.sock
-    - name: ORDERER_TYPE
-      value: ${ORDERER_TYPE}
     - name: SYS_CHANNEL
       value: ${SYS_CHANNEL}
     - name: ORG
@@ -478,7 +437,12 @@ function startService {
     # start tool container to generate genesis block and channel tx
     mkdir -p "${DATA_ROOT}/tool/docker"
     printDockerYaml > ${DATA_ROOT}/tool/docker/docker-compose.yaml
-    docker-compose -f ${DATA_ROOT}/tool/docker/docker-compose.yaml up -d
+    local ups=$(docker ps -f "status=running" | grep "tool.${ORG}" | wc -l)
+    if [ $ups -gt 0 ]; then
+      echo "Tools container tool.${ORG} is already running"
+    else
+      docker-compose -p tool-${ORG} -f ${DATA_ROOT}/tool/docker/docker-compose.yaml up -d
+    fi
   else
     echo "use kubernetes"
     # print k8s yaml for tool job
@@ -496,7 +460,7 @@ function startService {
 function shutdownService {
   if [ "${ENV_TYPE}" == "docker" ]; then
     echo "shutdown docker msp tools"
-    docker-compose -f ${DATA_ROOT}/tool/docker/docker-compose.yaml down --volumes --remove-orphans
+    docker-compose -p tool-${ORG} -f ${DATA_ROOT}/tool/docker/docker-compose.yaml down --volumes --remove-orphans
   else
     echo "shutdown K8s msp tools"
     kubectl delete -f ${DATA_ROOT}/tool/k8s/tool.yaml
@@ -509,10 +473,6 @@ function checkOrdererCrypto {
   if [ "${ENV_TYPE}" == "docker" ]; then
     echo "Error: not supported for docker"
     return 1
-  fi
-  if [ "${ORDERER_TYPE}" != "etcdraft" ]; then
-    echo "Error: orderer type ${ORDERER_TYPE} is not supported"
-    return 2
   fi
   local seq=${1:-"0"}
   local max=${2:-"0"}
@@ -533,8 +493,9 @@ function checkOrdererCrypto {
 
 function execCommand {
   local _cmd="gen-artifact.sh $@"
+  echo "execute command ${_cmd}"
   if [ "${ENV_TYPE}" == "docker" ]; then
-    docker exec -it tool bash -c "./${_cmd}"
+    docker exec -it tool.${FABRIC_ORG} bash -c "./${_cmd}"
   else
     kubectl exec -it tool -n ${ORG} -- bash -c "./${_cmd}"
   fi
@@ -601,46 +562,58 @@ function buildFlogoApp {
 # Print the usage message
 function printHelp() {
   echo "Usage: "
-  echo "  msp-util.sh <cmd> [-p <property file>] [-t <env type>] [-o <consensus type>] [-c <channel name>]"
+  echo "  msp-util.sh <cmd> [-o <orderer-org>] [-p <peer-org>] [-t <env type>] [-a <consensus algorithm>] [-c <channel name>]"
   echo "    <cmd> - one of the following commands"
   echo "      - 'start' - start tools container to run msp-util"
   echo "      - 'shutdown' - shutdown tools container for the msp-util"
   echo "      - 'bootstrap' - generate bootstrap genesis block and test channel tx defined in network spec"
-  echo "      - 'genesis' - generate genesis block of specified consensus type, with argument '-o <consensus type>'"
+  echo "      - 'genesis' - generate genesis block of specified consensus type, with argument '-a <consensus algorithm>'"
   echo "      - 'channel' - generate channel creation tx for specified channel name, with argument '-c <channel name>'"
   echo "      - 'mspconfig' - print MSP config json for adding to a network, output in '${DATA_ROOT}/tool'"
   echo "      - 'orderer-config' - print orderer RAFT consenter config for adding to a network, with arguments -s <start-seq> [-e <end-seq>]"
   echo "      - 'build-cds' - build chaincode cds package from flogo model, with arguments -m <model-json> [-v <version>]"
   echo "      - 'build-app' - build linux executable from flogo model, with arguments -m <model-json>"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "    -o <orderer-org> - the .env file in config folder that defines the orderer org, e.g., orderer (default)"
+  echo "    -p <peer-org> - the .env file in config folder that defines a peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
-  echo "    -o <consensus type> - 'solo' or 'etcdraft' used with the 'genesis' command"
+  echo "    -a <consensus algorithm> - 'solo' or 'etcdraft' used with the 'genesis' command"
   echo "    -c <channel name> - name of a channel, used with the 'channel' command"
   echo "    -s <start seq> - start sequence number (inclusive) for orderer config"
   echo "    -e <end seq> - end sequence number (exclusive) for orderer config"
   echo "    -m <model json> - Flogo model json file"
   echo "    -v <cc version> - version of chaincode"
   echo "  msp-util.sh -h (print this message)"
+  echo "  Example:"
+  echo "    msp-util.sh start -t docker -o orderer -p org1 -p org2"
+  echo "    msp-util.sh bootstrap -t docker -o orderer -p org1 -p org2"
 }
 
-ORG_ENV="netop1"
+# default orderer org name
+ORDERER_ORG="orderer"
+PEER_ORGS=()
+# default chaincode version
 VERSION=1.0
 
 CMD=${1}
-shift
-while getopts "h?p:t:o:c:s:e:m:v:" opt; do
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
+while getopts "h?o:p:t:a:c:s:e:m:v:" opt; do
   case "$opt" in
   h | \?)
     printHelp
     exit 0
     ;;
+  o)
+    ORDERER_ORG=$OPTARG
+    ;;
   p)
-    ORG_ENV=$OPTARG
+    PEER_ORGS+=($OPTARG)
     ;;
   t)
     ENV_TYPE=$OPTARG
     ;;
-  o)
+  a)
     CONS_TYPE=$OPTARG
     ;;
   c)
@@ -661,23 +634,28 @@ while getopts "h?p:t:o:c:s:e:m:v:" opt; do
   esac
 done
 
-source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORG_ENV} ${ENV_TYPE}
+source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
 
 case "${CMD}" in
 start)
-  echo "start msp util tool: ${ORG_ENV} ${ENV_TYPE}"
+  echo "start msp util tool: ${ORDERER_ORG} ${ENV_TYPE}"
   startService
   ;;
 shutdown)
-  echo "shutdown msp util tool: ${ORG_ENV} ${ENV_TYPE}"
+  echo "shutdown msp util tool: ${ORDERER_ORG} ${ENV_TYPE}"
   shutdownService
   ;;
 bootstrap)
-  echo "bootstrap msp artifacts: ${ORG_ENV} ${ENV_TYPE}"
-  execCommand "bootstrap"
+  echo "bootstrap msp artifacts: ${PEER_ORGS[@]} ${ENV_TYPE}"
+  for p in "${PEER_ORGS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${p} ${ENV_TYPE}
+    PEER_MSPS+=(${ORG_MSP})
+  done
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
+  execCommand "bootstrap ${PEER_MSPS[@]}"
   ;;
 mspconfig)
-  echo "print peer MSP config json file: ${ORG_ENV} ${ENV_TYPE}"
+  echo "print peer MSP config json file: ${ORDERER_ORG} ${ENV_TYPE}"
   execCommand "mspconfig"
   ;;
 genesis)
@@ -714,7 +692,7 @@ orderer-config)
   fi
   ;;
 build-cds)
-  echo "build chaincode cds package: ${MODEL} ${VERSION}"
+  echo "build chaincode package: ${MODEL} ${VERSION}"
   buildFlogoChaincode
   ;;
 build-app)

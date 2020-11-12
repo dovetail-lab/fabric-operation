@@ -5,8 +5,13 @@
 # in the license file that is distributed with this file.
 
 # Run this sript in ca-client container to generate crypto cert and keys for orderers and peers of an org
-# usage: gen-crypto.sh
-# it reads config parameters for the org from file ./org.env in the same same script folder.
+# usage: gen-crypto.sh cmd [ args ], e.g.
+#   gen-crypto.sh bootstrap 
+#   gen-crypto.sh orderer start-seq end-seq
+#   gen-crypto.sh peer start-seq end-seq
+#   gen-crypto.sh admin admin1 admin2
+#   gen-crypto.sh user user1 user2
+# it reads config parameters for the org from file ./org.env in the script folder.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 source ${SCRIPT_DIR}/org.env
@@ -17,34 +22,35 @@ CITY=${CSR_CITY:-"Denver"}
 CSR_NAMES="C=${COUNTRY},ST=${STATE},L=${CITY},O=${FABRIC_ORG}"
 
 # print out the host:port for a specified ca-server name
-# Usage: caHostPort ca|tls
+# Usage: caHostPort ca|tlsca
 function caHostPort {
   # SVC_DOMAIN is set in k8s client pod yaml, indicating that k8s is in use
+  local cahost=${1}.${FABRIC_ORG}
+  local caport=7054
   if [ ! -z "${SVC_DOMAIN}" ]; then
+    cahost=${1}-server.${SVC_DOMAIN}
     if [ "${1}" == "ca" ]; then
-      echo "ca-server.${SVC_DOMAIN}:${CA_PORT:-"7054"}"
+      caport=${CA_PORT:-"7054"}
     else
-      echo "tlsca-server.${SVC_DOMAIN}:${TLS_PORT:-"7055"}"
+      caport=${TLS_PORT:-"7055"}
     fi
-  else
-    # use host:port for docker-compose
-    echo "${1}.${FABRIC_ORG}:7054"
   fi
+  echo "${cahost}:${caport}"
 }
 
 # print out https://user:pass@host:port for ca admin user
-# Usage: caAdminUrl ca|tls
+# Usage: caAdminUrl ca|tlsca
 function caAdminUrl {
-  local _hostPort=$(caHostPort ${1})
+  local hostPort=$(caHostPort ${1})
+
+  local admUser=${TLS_ADMIN:-"tlsadmin"}
+  local admPass=${TLS_PASSWD:-"tlsadminpw"}
   if [ "${1}" == "ca" ]; then
-    local _admUser=${CA_ADMIN:-"caadmin"}
-    local _admPass=${CA_PASSWD:-"caadminpw"}
-    echo "https://${_admUser}:${_admPass}@${_hostPort}"
-  else
-    local _admUser=${TLS_ADMIN:-"tlsadmin"}
-    local _admPass=${TLS_PASSWD:-"tlsadminpw"}
-    echo "https://${_admUser}:${_admPass}@${_hostPort}"
+    admUser=${CA_ADMIN:-"caadmin"}
+    admPass=${CA_PASSWD:-"caadminpw"}
   fi
+
+  echo "https://${admUser}:${admPass}@${hostPort}"
 }
 
 # adminCrypto register|enroll [ adm-1 adm-2 ]
@@ -311,16 +317,19 @@ function initCrypto {
     printConfigYaml > ${DATA_ROOT}/crypto/msp/config.yaml
 
     # initialize tool crypto
+    echo "copy tools crypto to ${DATA_ROOT}/tool/crypto"
     mkdir -p ${DATA_ROOT}/tool/crypto
     cp -R ${DATA_ROOT}/crypto/msp ${DATA_ROOT}/tool/crypto
 
     # initialize cli crypto if the org provides orderers
     if [ "${ORDERER_MAX:-"0"}" -gt 0 ]; then
+      echo "copy cli crypto to ${DATA_ROOT}/cli/crypto/orderer-0/msp"
       mkdir -p ${DATA_ROOT}/cli/crypto/orderer-0/msp
       cp -R ${DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/cli/crypto/orderer-0/msp
     fi
 
     # initialize gateway crypto
+    echo "copy gateway crypto to ${DATA_ROOT}/gateway/${FABRIC_ORG}"
     mkdir -p ${DATA_ROOT}/gateway/${FABRIC_ORG}/ca/tls
     cp ${DATA_ROOT}/crypto/ca/tls/server.crt ${DATA_ROOT}/gateway/${FABRIC_ORG}/ca/tls
     cp -R ${DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/gateway/${FABRIC_ORG}

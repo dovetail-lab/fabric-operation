@@ -6,57 +6,56 @@
 
 # start fabric-ca server and client for a specified org,
 #   with optional target env, i.e., docker, k8s, aws, az, gcp, etc, to provide extra SVC_DOMAIN config
-# usage: start-ca.sh <org_name> <env>
+# usage: ca-server.sh start -p <org_name> -t <env>
 # where config parameters for the org are specified in ../config/org_name.env, e.g.
-#   start-ca.sh netop1
-# use config parameters specified in ../config/netop1.env
+#   ca-server.sh start -p org1
+# use config parameters specified in ../config/org1.env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 
 # printServerService ca|tlsca
 function printServerService {
-  CA_NAME=${1}
-  if [ "${CA_NAME}" == "tlsca" ]; then
-    PORT=${TLS_PORT}
-    ADMIN=${TLS_ADMIN:-"tlsadmin"}
-    PASSWD=${TLS_PASSWD:-"tlsadminpw"}
-  else
-    PORT=${CA_PORT}
-    ADMIN=${CA_ADMIN:-"caadmin"}
-    PASSWD=${CA_PASSWD:-"caadminpw"}
+  local port=${CA_PORT}
+  local admin=${CA_ADMIN:-"caadmin"}
+  local passwd=${CA_PASSWD:-"caadminpw"}
+  if [ "${1}" == "tlsca" ]; then
+    port=${TLS_PORT}
+    admin=${TLS_ADMIN:-"tlsadmin"}
+    passwd=${TLS_PASSWD:-"tlsadminpw"}
   fi
 
-  CN_NAME="${CA_NAME}.${FABRIC_ORG}"
-  setServerConfig ${CA_NAME}
+  local cn="${1}.${FABRIC_ORG}"
+  setServerConfig ${1} ${admin} ${passwd}
 
   echo "
-  ${CN_NAME}:
-    image: hyperledger/fabric-ca:${FAB_VERSION}
-    container_name: ${CN_NAME}
+  ${cn}:
+    image: hyperledger/fabric-ca:${CA_VERSION}
+    container_name: ${cn}
     ports:
-    - ${PORT}:7054
+    - ${port}:7054
     environment:
     - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
     - FABRIC_CA_SERVER_PORT=7054
     - FABRIC_CA_SERVER_TLS_ENABLED=true
-    - FABRIC_CA_SERVER_CSR_CN=${CN_NAME}
-    - FABRIC_CA_SERVER_CSR_HOSTS=${CN_NAME},localhost
+    - FABRIC_CA_SERVER_CA_NAME=${1}-${ORG}
+    - FABRIC_CA_SERVER_CSR_CN=${cn}
+    - FABRIC_CA_SERVER_CSR_HOSTS=${cn},localhost
     volumes:
-    - ${DATA_ROOT}/canet/${CA_NAME}-server:/etc/hyperledger/fabric-ca-server
-    command: sh -c 'fabric-ca-server start -b ${ADMIN}:${PASSWD}'
+    - ${DATA_ROOT}/canet/${1}-server:/etc/hyperledger/fabric-ca-server
+    command: sh -c 'fabric-ca-server start -b ${admin}:${passwd}'
     networks:
     - ${ORG}"
 }
 
 # printClientService - print docker yaml for ca client
 function printClientService {
-  CLIENT_NAME="caclient.${FABRIC_ORG}"
+  local name="caclient.${FABRIC_ORG}"
   ${sumd} -p "${DATA_ROOT}/canet/ca-client"
 
   echo "
-  ${CLIENT_NAME}:
-    image: hyperledger/fabric-ca:${FAB_VERSION}
-    container_name: ${CLIENT_NAME}
+  ${name}:
+    image: hyperledger/fabric-ca:${CA_VERSION}
+    container_name: ${name}
     environment:
     - SVC_DOMAIN=${SVC_DOMAIN}
     - FABRIC_CA_HOME=/etc/hyperledger/data/canet/ca-client
@@ -247,41 +246,39 @@ spec:
 
 # printK8sServer ca|tlsca
 function printK8sServer {
-  CA_NAME=${1}
-  if [ "${CA_NAME}" == "tlsca" ]; then
-    PORT=${TLS_PORT}
-    ADMIN=${TLS_ADMIN:-"tlsadmin"}
-    PASSWD=${TLS_PASSWD:-"tlsadminpw"}
-  else
-    PORT=${CA_PORT}
-    ADMIN=${CA_ADMIN:-"caadmin"}
-    PASSWD=${CA_PASSWD:-"caadminpw"}
+  local port=${CA_PORT}
+  local admin=${CA_ADMIN:-"caadmin"}
+  local passwd=${CA_PASSWD:-"caadminpw"}
+  if [ "${1}" == "tlsca" ]; then
+    port=${TLS_PORT}
+    admin=${TLS_ADMIN:-"tlsadmin"}
+    passwd=${TLS_PASSWD:-"tlsadminpw"}
   fi
-  setServerConfig ${CA_NAME}
+  setServerConfig ${1} ${admin} ${passwd}
 
   echo "---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ${CA_NAME}-server
+  name: ${1}-server
   namespace: ${ORG}
   labels:
-    app: ${CA_NAME}
+    app: ${1}
 spec:
   replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: ${CA_NAME}
+      app: ${1}
   template:
     metadata:
       labels:
-        app: ${CA_NAME}
+        app: ${1}
     spec:
       containers:
-      - name: ${CA_NAME}-server
-        image: hyperledger/fabric-ca:${FAB_VERSION}
+      - name: ${1}-server
+        image: hyperledger/fabric-ca:${CA_VERSION}
         resources:
           requests:
             memory: ${POD_MEM}
@@ -290,9 +287,9 @@ spec:
         - name: FABRIC_CA_HOME
           value: /etc/hyperledger/fabric-ca-server
         - name: FABRIC_CA_SERVER_CSR_CN
-          value: ${CA_NAME}.${FABRIC_ORG}
+          value: ${1}.${FABRIC_ORG}
         - name: FABRIC_CA_SERVER_CSR_HOSTS
-          value: ${CA_NAME}-server.${SVC_DOMAIN},${CA_NAME}.${FABRIC_ORG},localhost
+          value: ${1}-server.${SVC_DOMAIN},${1}.${FABRIC_ORG},localhost
         - name: FABRIC_CA_SERVER_PORT
           value: \"7054\"
         - name: FABRIC_CA_SERVER_TLS_ENABLED
@@ -300,7 +297,7 @@ spec:
         args:
         - sh
         - -c
-        - fabric-ca-server start -b ${ADMIN}:${PASSWD}
+        - fabric-ca-server start -b ${admin}:${passwd}
         ports:
         - containerPort: 7054
           name: server
@@ -311,19 +308,19 @@ spec:
       volumes:
       - name: data
         persistentVolumeClaim:
-          claimName: ${CA_NAME}-server-pvc
+          claimName: ${1}-server-pvc
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: ${CA_NAME}-server
+  name: ${1}-server
   namespace: ${ORG}
 spec:
   selector:
-    app: ${CA_NAME}
+    app: ${1}
   ports:
   - protocol: TCP
-    port: ${PORT}
+    port: ${port}
     targetPort: server"
 }
 
@@ -331,27 +328,27 @@ spec:
 # the generated yaml uses org_name as Kubernetes namespace, so multiple orgs can co-exist.
 # To avoid re-typing namespace on every kubectl command, set the context to use the namespace by default, e.g.,
 # kubectl config view
-# kubectl config set-context netop1 --namespace=netop1 --cluster=docker-desktop --user=docker-desktop
-# kubectl config use-context netop1
+# kubectl config set-context org1 --namespace=org1 --cluster=docker-desktop --user=docker-desktop
+# kubectl config use-context org1
 function printK8sCAPods {
   printK8sServer ca
   printK8sServer tlsca
   printK8sClient
 }
 
-# setServerConfig ca|tlsca
+# setServerConfig ca|tlsca adminUser adminPasswd
+# generate ca server config from template
 function setServerConfig {
-  CA_NAME=${1}
-  SERVER_DIR="${DATA_ROOT}/canet/${CA_NAME}-server"
-  ${sumd} -p ${SERVER_DIR}
+  local serverDir="${DATA_ROOT}/canet/${1}-server"
+  ${sumd} -p ${serverDir}
   cp ${SCRIPT_DIR}/fabric-ca-server-config.yaml ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%admin%%/${ADMIN}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%adminpw%%/${PASSWD}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%country%%/${CSR_COUNTRY}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%state%%/${CSR_STATE}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%city%%/${CSR_CITY}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  sed -i -e "s/%%org%%/${FABRIC_ORG}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
-  ${sumv} ${SCRIPT_DIR}/fabric-ca-server-config.tmp ${SERVER_DIR}/fabric-ca-server-config.yaml
+  sed -i -e "s/<<<admin>>>/${2}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  sed -i -e "s/<<<adminpw>>>/${3}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  sed -i -e "s/<<<country>>>/${CSR_COUNTRY}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  sed -i -e "s/<<<state>>>/${CSR_STATE}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  sed -i -e "s/<<<city>>>/${CSR_CITY}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  sed -i -e "s/<<<org>>>/${FABRIC_ORG}/" ${SCRIPT_DIR}/fabric-ca-server-config.tmp
+  ${sumv} ${SCRIPT_DIR}/fabric-ca-server-config.tmp ${serverDir}/fabric-ca-server-config.yaml
   rm ${SCRIPT_DIR}/fabric-ca-server-config.tmp*
 }
 
@@ -362,7 +359,7 @@ function startServer {
     printCADockerYaml > ${DATA_ROOT}/canet/docker/docker-compose.yaml
 
     # start CA server and client
-    docker-compose -f ${DATA_ROOT}/canet/docker/docker-compose.yaml up -d
+    docker-compose -p ca-${ORG} -f ${DATA_ROOT}/canet/docker/docker-compose.yaml up -d
   else
     # create k8s yaml for CA server and client
     ${sumd} -p "${DATA_ROOT}/canet/k8s"
@@ -378,20 +375,20 @@ function startServer {
 function stopServer {
   if [ "${ENV_TYPE}" == "docker" ]; then
     echo "stop docker containers"
-    docker-compose -f ${DATA_ROOT}/canet/docker/docker-compose.yaml down --volumes --remove-orphans
+    docker-compose -p ca-${ORG} -f ${DATA_ROOT}/canet/docker/docker-compose.yaml down --volumes --remove-orphans
   else
     echo "stop k8s CA PODs"
     kubectl delete -f ${DATA_ROOT}/canet/k8s/ca.yaml
     kubectl delete -f ${DATA_ROOT}/canet/k8s/ca-pv.yaml
-
-    if [ ! -z "${CLEANUP}" ]; then
-      echo "cleanup ca/tlsca server data"
-      ${surm} -R ${DATA_ROOT}/canet/ca-server
-      ${surm} -R ${DATA_ROOT}/canet/tlsca-server
-    fi
-    echo "cleanup ca-client data"
-    ${surm} -R ${DATA_ROOT}/canet/ca-client/*
   fi
+
+  if [ ! -z "${CLEANUP}" ]; then
+    echo "cleanup ca/tlsca server data"
+    ${surm} -R ${DATA_ROOT}/canet/ca-server
+    ${surm} -R ${DATA_ROOT}/canet/tlsca-server
+  fi
+  echo "cleanup ca-client data"
+  ${surm} -R ${DATA_ROOT}/canet/ca-client/*
 }
 
 # Print the usage message
@@ -401,16 +398,18 @@ function printHelp() {
   echo "    <cmd> - one of 'start', or 'shutdown'"
   echo "      - 'start' - start ca and tlsca servers and ca client"
   echo "      - 'shutdown' - shutdown ca and tlsca servers and ca client, and cleanup ca-client data"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., org1 (default)"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -d - delete all ca/tlsca server data for fresh start next time"
   echo "  ca-server.sh -h (print this message)"
 }
 
-ORG_ENV="netop1"
+ORG_ENV="org1"
 
 CMD=${1}
-shift
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
 while getopts "h?p:t:d" opt; do
   case "$opt" in
   h | \?)

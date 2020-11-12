@@ -7,18 +7,19 @@
 # setup variables for target environment, i.e., docker, k8s, aws, az, gcp, etc
 # usage: setup.sh <org_name> <env>
 # it uses config parameters of the specified org as defined in org_name.env, e.g.
-#   setup.sh netop1 docker
-# using config parameters specified in ./netop1.env
+#   setup.sh org1 docker
+# using config parameters specified in ./org1.env
 
 curr_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
-source ${curr_dir}/${1:-"netop1"}.env
+source ${curr_dir}/${1:-"org1"}.env
 
 # set defaults
-FAB_VERSION=${FAB_VERSION:-"1.4.9"}
+FAB_VERSION=${FAB_VERSION:-"2.2.1"}
+CA_VERSION=${CA_VERSION:-"1.4.9"}
+
 ORG=${FABRIC_ORG%%.*}
 ORG_MSP="${ORG}MSP"
-ORDERER_MSP=${ORDERER_MSP:-"${ORG}OrdererMSP"}
-SYS_CHANNEL=${SYS_CHANNEL:-"${ORG}-channel"}
+SYS_CHANNEL=${SYS_CHANNEL:-"sys-channel"}
 TEST_CHANNEL=${TEST_CHANNEL:-"mychannel"}
 ORDERER_TYPE=${ORDERER_TYPE:-"solo"}
 POD_CPU=${POD_CPU:-"100m"}
@@ -48,19 +49,15 @@ if [ -z "${target}" ]; then
   elif [[ $fs == */vol1 ]]; then
     target="gcp"
   fi
-  echo "set target ENV_TYPE: ${target}"
   ENV_TYPE=${target}
 fi
 
 if [ "${target}" == "docker" ]; then
-  echo "use docker-compose"
   SVC_DOMAIN=""
 else
   # config for kubernetes
-  echo "use kubernetes"
   DNS_IP=$(kubectl get svc --all-namespaces -o wide | grep kube-dns | awk '{print $4}')
   SVC_DOMAIN="${ORG}.svc.cluster.local"
-  echo "setup Kubernetes with service domain ${SVC_DOMAIN}, and DNS ${DNS_IP}"
 fi
 
 sumd="sudo mkdir"
@@ -85,5 +82,4 @@ else
   sumv="mv"
   stee="tee"
 fi
-echo "set persistent data root ${DATA_ROOT}"
 ${sumd} -p ${DATA_ROOT}

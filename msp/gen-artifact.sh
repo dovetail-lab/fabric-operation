@@ -10,30 +10,25 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 
 function bootstrap {
-  createGenesisBlock ${ORDERER_TYPE}
-  createChannelTx ${TEST_CHANNEL}
+  createGenesisBlock
+  createChannelTx ${TEST_CHANNEL} $@
 }
 
 function createGenesisBlock {
-  if [ "$1" == "solo" ] || [ "$1" == "etcdraft" ]; then
-    check=$(grep "${1}OrdererGenesis:" configtx.yaml)
-    if [ -z "${check}" ]; then
-      echo "profile ${1}OrdererGenesis is not defiled"
-    else
-      configtxgen -profile ${1}OrdererGenesis -channelID ${SYS_CHANNEL} -outputBlock ./${1}-genesis.block
-    fi
-  else
-    echo "'$1' is not a supported orderer type. choose 'solo' or 'etcdraft'"
-  fi
+  echo "create orderer genesis block for ${SYS_CHANNEL}"
+  configtxgen -profile AppOrdererGenesis -channelID ${SYS_CHANNEL} -outputBlock ./orderer-genesis.block
 }
 
 function createChannelTx {
-  check=$(grep "${ORG}Channel:" configtx.yaml)
-  if [ -z "${check}" ]; then
-    echo "profile ${ORG}Channel is not defined"
-  else
-    configtxgen -profile ${ORG}Channel -outputCreateChannelTx ./${1}.tx -channelID ${1}
-    configtxgen -profile ${ORG}Channel -outputAnchorPeersUpdate ./${1}-anchors.tx -channelID ${1} -asOrg ${ORG_MSP}
+  local c=${1}
+  shift
+  echo "create channel tx for ${c}"
+  configtxgen -profile AppChannel -outputCreateChannelTx ./${c}.tx -channelID ${c}
+  if [ "$#" -gt "0" ]; then
+    for org in "$@"; do
+      echo "create anchor tx for channel $c and org $org"
+      configtxgen -profile AppChannel -outputAnchorPeersUpdate ./${c}-anchors-${org}.tx -channelID ${c} -asOrg ${org}
+    done
   fi
 }
 
@@ -135,8 +130,8 @@ ARGS="$@"
 
 case "${CMD}" in
 bootstrap)
-  echo "bootstrap ${ORDERER_TYPE} genesis block and tx for test channel ${TEST_CHANNEL}"
-  bootstrap
+  echo "bootstrap orderer genesis block and tx for test channel ${TEST_CHANNEL}"
+  bootstrap ${ARGS}
   ;;
 mspconfig)
   echo "print peer MSP config '${ORG_MSP}.json' used to add it to a network"

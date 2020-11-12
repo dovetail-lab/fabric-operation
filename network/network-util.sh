@@ -76,102 +76,62 @@ function joinChannel {
   fi
   if [ "${3}" == "anchor" ]; then
     echo "update anchor peer for channel ${2} ..."
-    eval "${_env} peer channel update -o ${ORDERER_URL} -c ${2} -f ${2}-anchors.tx --tls --cafile $ORDERER_CA"
+    eval "${_env} peer channel update -o ${ORDERER_URL} -c ${2} -f ${2}-anchors-${CORE_PEER_LOCALMSPID}.tx --tls --cafile $ORDERER_CA"
   fi
 }
 
-# packageChaincode <peer> <src> <name> [<version>] [<lang>] [<policy>]
-# write un-signed output as name_version.cds if policy is not specified
-# or, write signed output as name_version_ORG.cds if policy is specified
+# packageChaincode <name> <version> <lang>
+# write chaincode package as name_version.tar.gz
+# read source folder from ./chaincode/<name>
 function packageChaincode {
-  local _ccpath=${GOPATH}/src/github.com/chaincode/${2}
-  local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-    # copy cc src for Kubernetes only
-    if [ -d "${_ccpath}" ]; then
-      echo "replace old code in ${_ccpath}"
-      rm -R ${_ccpath}/*
-      cp -R ./chaincode/${2}/* ${_ccpath}
-    else
-      echo "copy new chaincode to folder ${_ccpath}"
-      mkdir -p ${_ccpath}
-      cp -R ./chaincode/${2}/* ${_ccpath}
-    fi
-  fi
-
-  local _version=${4:-"1.0"}
-  local _lang=${5:-"golang"}
-  echo "package chaincode ${3}:${_version} from github.com/chaincode/${2} with signature ${_signopt} ${_policy} ..."
-  if [ -z "${6}" ]; then
-    eval "${_env} peer chaincode package -n ${3} -v ${_version} -l ${_lang} -p \"github.com/chaincode/${2}\" ${3}_${_version}.cds"
-    echo "output packaged cds file: ${3}_${_version}.cds"
-  else
-    eval "${_env} peer chaincode package -n ${3} -v ${_version} -l ${_lang} -p \"github.com/chaincode/${2}\" -s -S -i \"${6}\" ${ORG}_${3}_${_version}.cds"
-    echo "output packaged cds file: ${ORG}_${3}_${_version}.cds"
-  fi  
+  local _src=${PWD}/chaincode/${1}
+  peer lifecycle chaincode package ${1}_${2}.tar.gz --path ${_src} --lang ${3} --label ${1}_${2}
+  echo "output packaged file: ${PWD}/${1}_${2}.tar.gz"
 }
 
-# signChaincode <peer> <cds-file>
-function signChaincode {
-  if [ ! -f "${2}" ]; then
-    echo "cds file does not exist: ${2}. must call 'package chaincode' with endorsement policy first"
-    return 1
-  fi
-  local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  fi
-  eval "${_env} peer chaincode signpackage ${2} ${ORG}_${2}"
-  echo "output signed package cds file: ${ORG}_${2}"
-}
-
-# installChaincode <peer> <cds-file>
+# installChaincode <peer> <cc_package_file>
 function installChaincode {
   if [ ! -f "${2}" ]; then
-    echo "cds file does not exist: ${2}. must call 'package chaincode' first"
+    echo "cc package file does not exist: ${2}. must call 'package-chaincode' first"
     return 1
   fi
   local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
   if [ ! -z "${SVC_DOMAIN}" ]; then
     _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
   fi
-  eval "${_env} peer chaincode install ${2}"
+  eval "${_env} peer lifecycle chaincode install ${2}"
 }
 
-# instantiateChaincode <peer> <channel> <name> [<version>] [args] [policy] [lang]
-function instantiateChaincode {
-  local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
+# approve chaincode <channel> <pakage-id> <cc-name> <cc-version> <cc-seq> [<collection-config> [<policy>]]
+function approveChaincode {
+  local _collConfig=""
+  if [ ! -z "${6}" ]; then
+    _collConfig="--collections-config ${6}"
   fi
-  local _version=${4:-"1.0"}
-  local _policy=${6:-"OR ('${ORG}MSP.peer')"}
-  local _lang=${7:-"golang"}
-  local _args=${5:-'{"Args":["init"]}'}
+  local _policy=""
+  if [ ! -z "${7}" ]; then
+    _policy="--signature-policy \"${7}\""
+  fi
 
-  echo "check if chaincode ${3}:${_version} has been instantiated"
-  eval "${_env} peer chaincode list -C ${2} --instantiated" | grep "Name: ${3}, Version: ${_version}"
-  if [ "$?" -ne 0 ]; then
-    echo "instantiate chaincode ${3}:${_version} (${_lang}) on peer ${1}, channel ${2}, args ${_args} ..."
-    eval "${_env} peer chaincode instantiate -C ${2} -n ${3} -v ${_version} -l ${_lang} -c '${_args}' -P \"${_policy}\" -o ${ORDERER_URL} --tls --cafile ${ORDERER_CA}"
-  else
-    echo "chaincode ${3}:${_version} already instantiated"
-  fi
+  echo "approve chaincode $@"
+  peer lifecycle chaincode approveformyorg -o ${ORDERER_URL} --tls --cafile ${ORDERER_CA} -C ${1} --package-id ${2} -n ${3} -v ${4} --sequence ${5} ${_collConfig} ${_policy}
 }
 
-# upgrade Chaincode <peer> <channel> <name> <version> [args] [policy] [lang]
-function upgradeChaincode {
-  local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
+# commit chaincode <channel> <cc-name> <cc-version> <cc-seq> <collection-config> <policy> <peerParams>
+function commitChaincode {
+  local _collConfig=""
+  if [ ! -z "${5}" ]; then
+    _collConfig="--collections-config ${5}"
   fi
-  local _policy=${6:-"OR ('${ORG}MSP.peer')"}
-  local _lang=${7:-"golang"}
-  local _args=${5:-'{"Args":["init"]}'}
+  local _policy=""
+  if [ ! -z "${6}" ]; then
+    _policy="--signature-policy \"${6}\""
+  fi
 
-  echo "upgrade chaincode ${3}:${4} (${_lang}) on peer ${1}, channel ${2}, args ${_args} ..."
-  eval "${_env} peer chaincode upgrade -C ${2} -n ${3} -v ${4} -l ${_lang} -c '${_args}' -P \"${_policy}\" -o ${ORDERER_URL} --tls --cafile ${ORDERER_CA}"
+  echo "check commit readiness $@"
+  peer lifecycle chaincode checkcommitreadiness -C ${1} -n ${2} -v ${3} --sequence ${4} ${_collConfig} ${_policy} --output json
+  echo "commit chaincode $@"
+  peer lifecycle chaincode commit -o ${ORDERER_URL} --tls --cafile ${ORDERER_CA} -C ${1} -n ${2} -v ${3} --sequence ${4} ${7} ${_collConfig} ${_policy}
 }
 
 # queryChaincode <peer> <channel> <name> <args>
@@ -184,14 +144,10 @@ function queryChaincode {
   eval "${_env} peer chaincode query -C ${2} -n ${3} -c '${_args}'"
 }
 
-# invokeChaincode <peer> <channel> <name> <args>
+# invokeChaincode <channel> <name> <args> <peerParams>
 function invokeChaincode {
-  local _env="CORE_PEER_ADDRESS=${1}.${FABRIC_ORG}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    _env="CORE_PEER_ADDRESS=${1}.peer.${SVC_DOMAIN}:7051 CORE_PEER_TLS_ROOTCERT_FILE=${PWD}/crypto/${1}/tls/ca.crt"
-  fi
-  local _args=''${4}''
-  eval "${_env} peer chaincode invoke -C ${2} -n ${3} -c '${_args}' -o ${ORDERER_URL} --tls --cafile $ORDERER_CA"
+  echo "invoke chaincode $@"
+  peer chaincode invoke -o ${ORDERER_URL} --tls --cafile ${ORDERER_CA} ${4} -C ${1} -n ${2} -c ''${3}''
 }
 
 # create channel update tx for adding a new org to a channel
@@ -275,20 +231,18 @@ function printUsage {
   echo "      - 'create-channel' - create a channel using peer-0, <args> = <channel>"
   echo "      - 'join-channel' - join a peer to a channel, <args> = <peer> <channel> [anchor]"
   echo "        e.g., network-util.sh join-channel \"peer-0\" \"mychannel\" anchor"
-  echo "      - 'package-chaincode' - package chaincode on a peer, <args> = <peer> <src> <name> [<version>] [<lang>] [<policy>]"
-  echo "        e.g., network-util.sh package-chaincode \"peer-0\" \"chaincode_example02/go\" \"mycc\" \"1.0\" \"golang\" \"AND ('netop1MSP.admin')\""
-  echo "      - 'sign-chaincode' - sign chaincode package on a peer, <args> = <peer> <cds-file>"
-  echo "        e.g., network-util.sh sign-chaincode \"peer-0\" \"mycc_1.0.cds\""
-  echo "      - 'install-chaincode' - install chaincode on a peer, <args> = <peer> <cds-file>"
-  echo "        e.g., network-util.sh install-chaincode \"peer-0\" \"mycc_1.0.cds\""
-  echo "      - 'instantiate-chaincode' - instantiate chaincode on a peer, <args> = <peer> <channel> <name> [<version>] [<args>] [<policy>] [<lang>]"
-  echo "        e.g., network-util.sh instantiate-chaincode \"peer-0\" \"mychannel\" \"mycc\" \"1.0\" '{\"Args\":[\"init\",\"a\",\"100\",\"b\",\"200\"]}'"
-  echo "      - 'upgrade-chaincode' - upgrade chaincode on a peer, <args> = <peer> <channel> <name> <version> [<args>] [<policy>] [<lang>]"
-  echo "        e.g., network-util.sh upgrade-chaincode \"peer-0\" \"mychannel\" \"mycc\" \"2.0\" '{\"Args\":[\"init\",\"a\",\"100\",\"b\",\"200\"]}'"
+  echo "      - 'package-chaincode' - package chaincode, <args> = <name> <version> <lang>"
+  echo "        e.g., network-util.sh package-chaincode \"mycc\" \"1.0\" \"golang\""
+  echo "      - 'install-chaincode' - install chaincode on a peer, <args> = <peer> <cc_package-file>"
+  echo "        e.g., network-util.sh install-chaincode \"peer-0\" \"mycc_1.0.tar.gz\""
+  echo "      - 'approve-chaincode' - approve chaincode package for a channel, <args> = <channel> <pakage-id> <cc-name> <cc-version> <cc-seq> [<collection-config> [<policy>]]"
+  echo "        e.g., network-util.sh approve-chaincode \"mychannel\" \"mycc_1.0:abcd\" \"mycc\" \"1.0\" \"1\" \"golang\""
+  echo "      - 'commit-chaincode' - commit chaincode package for a channel, <args> = <channel> <cc-name> <cc-version> <cc-seq> <collection-config> <policy> <peerParams>"
+  echo "        e.g., network-util.sh ommit-chaincode \"mychannel\" \"mycc\" \"1.0\" \"1\" \"golang\" \"\" \"\" \"--peerAddresses ...\""
   echo "      - 'query-chaincode' - query chaincode from a peer, <args> = <peer> <channel> <name> <args>"
   echo "        e.g., network-util.sh query-chaincode \"peer-0\" \"mychannel\" \"mycc\" '{\"Args\":[\"query\",\"a\"]}'"
-  echo "      - 'invoke-chaincode' - invoke chaincode from a peer, <args> = <peer> <channel> <name> <args>"
-  echo "        e.g., network-util.sh invoke-chaincode \"peer-0\" \"mychannel\" \"mycc\" '{\"Args\":[\"invoke\",\"a\",\"b\",\"10\"]}'"
+  echo "      - 'invoke-chaincode' - invoke chaincode on one or more orgs, <args> = <channel> <name> <args> <peerParams>"
+  echo "        e.g., network-util.sh invoke-chaincode \"mychannel\" \"mycc\" '{\"Args\":[\"invoke\",\"a\",\"b\",\"10\"]}' \"--peerAddresses ...\""
   echo "      - 'add-orderer-tx' - generate update tx for add new orderers to sys channel for RAFT consensus, <args> = <consenter-file> [<channel>]"
   echo "      - 'add-org-tx' - generate update tx for add new msp to a channel, <args> = <msp> <channel>"
   echo "      - 'sign-transaction' - sign a config update transaction file in the CLI working directory, <args> = <tx-file>"
@@ -304,7 +258,7 @@ ARGS="$@"
 case "${CMD}" in
 test)
   echo "network smoke test"
-  test
+  test ${ARGS}
   ;;
 create-channel)
   echo "create channel [ ${ARGS} ]"
@@ -316,23 +270,19 @@ join-channel)
   ;;
 package-chaincode)
   echo "package chaincode [ ${ARGS} ]"
-  packageChaincode ${1} ${2} ${3} "${4}" "${5}" "${6}"
-  ;;
-sign-chaincode)
-  echo "sign chaincode [ ${ARGS} ]"
-  signChaincode ${ARGS}
+  packageChaincode ${ARGS}
   ;;
 install-chaincode)
   echo "install chaincode [ ${ARGS} ]"
   installChaincode ${ARGS}
   ;;
-instantiate-chaincode)
-  echo "instantiate chaincode [ ${ARGS} ]"
-  instantiateChaincode ${1} ${2} ${3} "${4}" ''${5}'' "${6}" ${7}
+approve-chaincode)
+  echo "approve chaincode [ ${ARGS} ]"
+  approveChaincode ${1} ${2} ${3} ${4} ${5} "${6}" "${7}"
   ;;
-upgrade-chaincode)
-  echo "upgrade chaincode [ ${ARGS} ]"
-  upgradeChaincode ${1} ${2} ${3} "${4}" ''${5}'' "${6}" ${7}
+commit-chaincode)
+  echo "commit chaincode [ ${ARGS} ]"
+  commitChaincode ${1} ${2} ${3} ${4} "${5}" "${6}" "${7}"
   ;;
 query-chaincode)
   echo "query chaincode [ ${ARGS} ]"
@@ -340,7 +290,7 @@ query-chaincode)
   ;;
 invoke-chaincode)
   echo "invoke chaincode [ ${ARGS} ]"
-  invokeChaincode ${1} ${2} ${3} ''${4}''
+  invokeChaincode ${1} ${2} ''${3}'' "${4}"
   ;;
 add-org-tx)
   echo "generate update tx for add new msp to a channel [ ${ARGS} ]"
