@@ -253,6 +253,7 @@ services:
       - ORG_MSP=${ORG_MSP}
       - TEST_CHANNEL=${TEST_CHANNEL}
       - FABRIC_ORG=${FABRIC_ORG}
+      - WORK=/etc/hyperledger/tool
     working_dir: /etc/hyperledger/tool
     command: /bin/bash -c 'while true; do sleep 30; done'
     volumes:
@@ -529,9 +530,21 @@ function buildFlogoChaincode {
   fi
 
   local cmd="fabric-cli/scripts/build-cds.sh ${_model} ${name} ${VERSION}"
-  kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
-  ${sumv} ${DATA_ROOT}/tool/${name}/${name}_${VERSION}.cds ${DATA_ROOT}/tool
-  echo "chaincode package is built in folder ${DATA_ROOT}/tool"
+  if [ "${ENV_TYPE}" == "docker" ]; then
+    docker exec -it tool.${FABRIC_ORG} bash -c "./${cmd}"
+  else
+    kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
+  fi
+  ${sumv} ${DATA_ROOT}/tool/${name}/${name}_${VERSION}.tar.gz ${DATA_ROOT}/tool
+
+  # copy to peer-org's cli for installation if PEER_ORGS are specified
+  local pack=${DATA_ROOT}/tool/${name}_${VERSION}.tar.gz
+  echo "chaincode package is built in folder ${pack}"
+  for po in "${PEER_ORGS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    echo "copy chaincode package to ${DATA_ROOT}/cli"
+    ${sucp} ${pack} ${DATA_ROOT}/cli
+  done
 }
 
 # build app executable from flogo model json
@@ -554,7 +567,12 @@ function buildFlogoApp {
   ${sucp} ${MODEL} ${DATA_ROOT}/tool/${name}
 
   cmd="fabric-cli/scripts/build-client.sh ${_model} ${name} linux amd64"
-  kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
+  if [ "${ENV_TYPE}" == "docker" ]; then
+    docker exec -it tool.${FABRIC_ORG} bash -c "./${cmd}"
+  else
+    kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
+  fi
+
   ${sumv} ${DATA_ROOT}/tool/${name}/${name}_linux_amd64 ${DATA_ROOT}/tool
   echo "app executable is built in folder ${DATA_ROOT}/tool"
 }
@@ -584,8 +602,8 @@ function printHelp() {
   echo "    -v <cc version> - version of chaincode"
   echo "  msp-util.sh -h (print this message)"
   echo "  Example:"
-  echo "    msp-util.sh start -t docker -o orderer -p org1 -p org2"
-  echo "    msp-util.sh bootstrap -t docker -o orderer -p org1 -p org2"
+  echo "    ./msp-util.sh start -t docker -o orderer -p org1 -p org2"
+  echo "    ./msp-util.sh bootstrap -t docker -o orderer -p org1 -p org2"
 }
 
 # default orderer org name

@@ -19,385 +19,380 @@
     "type": "flogo:app",
     "appModel": "1.1.1",
     "feVersion": "2.10.0",
-    "triggers": [
-        {
-            "ref": "#transaction",
-            "name": "fabric-transaction",
-            "description": "store audit log records on chain",
-            "settings": {},
-            "id": "FabricTransaction",
-            "handlers": [
-                {
-                    "description": "store audit log records on chain",
-                    "settings": {
-                        "name": "createAudit",
-                        "validation": false
-                    },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:createAudit"
-                        },
-                        "input": {
-                            "txID": "=$.txID",
-                            "txTime": "=$.txTime",
-                            "parameters": "=$.parameters"
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": "schema://AuditRecords"
-                        }
-                    },
-                    "name": "createAudit"
+    "triggers": [{
+        "ref": "#transaction",
+        "name": "fabric-transaction",
+        "description": "store audit log records on chain",
+        "settings": {},
+        "id": "FabricTransaction",
+        "handlers": [{
+                "description": "store audit log records on chain",
+                "settings": {
+                    "name": "createAudit",
+                    "validation": false
                 },
-                {
-                    "description": "retrieve an audit record by its state key",
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
                     "settings": {
-                        "name": "getRecord",
-                        "validation": false
+                        "flowURI": "res://flow:createAudit"
                     },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:getRecord"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "key": "=$.parameters.key"
+                    "input": {
+                        "txID": "=$.txID",
+                        "txTime": "=$.txTime",
+                        "parameters": "=$.parameters"
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
                                 }
                             }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": "=$.returns"
                         }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedger"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"key\": \"\"\n}"
-                            }
-                        }
-                    },
-                    "name": "getRecord"
+                    }
                 },
-                {
-                    "description": "retrieve records by recID",
-                    "settings": {
-                        "name": "getRecordsByID",
-                        "validation": false
-                    },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:getRecordsByID"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "recID": "=$.parameters.recID"
-                                }
-                            }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"recID\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"recID\": \"\"\n}"
-                            }
-                        }
-                    },
-                    "name": "getRecordsByID"
+                "reply": {
+                    "message": ""
                 },
-                {
-                    "description": "retrieve audit records by the txID of the record creation",
-                    "settings": {
-                        "name": "getRecordsByTxID",
-                        "validation": false
-                    },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:getRecordsByTxID"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "txID": "=$.parameters.txID"
-                                }
-                            }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
-                                }
-                            }
-                        }
-                    },
+                "schemas": {
                     "reply": {
-                        "message": ""
+                        "returns": "schema://AuditLedgerMap"
                     },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txID\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"txID\": \"\"\n}"
-                            }
-                        }
-                    },
-                    "name": "getRecordsByTxID"
+                    "output": {
+                        "parameters": "schema://AuditRecords"
+                    }
                 },
-                {
-                    "description": "retrieve audit records created at the specified time",
-                    "settings": {
-                        "name": "getRecordsByTxTime",
-                        "validation": false
-                    },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:getRecordsByTxTime"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "txTime": "=$.parameters.txTime"
-                                }
-                            }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txTime\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"txTime\": \"\"\n}"
-                            }
-                        }
-                    },
-                    "name": "getRecordsByTxTime"
+                "name": "createAudit"
+            },
+            {
+                "description": "retrieve an audit record by its state key",
+                "settings": {
+                    "name": "getRecord",
+                    "validation": false
                 },
-                {
-                    "description": "delete current state of an audit record of specified state key",
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
                     "settings": {
-                        "name": "deleteRecord",
-                        "validation": false
+                        "flowURI": "res://flow:getRecord"
                     },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:deleteRecord"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "key": "=$.parameters.key"
-                                }
-                            }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": "=$.returns"
-                        }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedger"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"key\": \"\"\n}"
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "key": "=$.parameters.key"
                             }
                         }
                     },
-                    "name": "deleteRecord"
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": "=$.returns"
+                    }
                 },
-                {
-                    "description": "delete all audit states created by a specified transaction id",
-                    "settings": {
-                        "name": "deleteTransaction",
-                        "validation": false
-                    },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:deleteTransaction"
-                        },
-                        "input": {
-                            "parameters": {
-                                "mapping": {
-                                    "txID": "=$.parameters.txID"
-                                }
-                            }
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "reply": {
-                        "message": ""
-                    },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txID\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"txID\": \"\"\n}"
-                            }
-                        }
-                    },
-                    "name": "deleteTransaction"
+                "reply": {
+                    "message": ""
                 },
-                {
-                    "description": "retrieve audit records of specified domain and owner in a time range",
-                    "settings": {
-                        "name": "queryTimeRange",
-                        "validation": false
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedger"
                     },
-                    "action": {
-                        "ref": "github.com/project-flogo/flow",
-                        "settings": {
-                            "flowURI": "res://flow:queryTimeRange"
-                        },
-                        "input": {
-                            "parameters": "=$.parameters"
-                        },
-                        "output": {
-                            "status": "=$.status",
-                            "message": "=$.message",
-                            "returns": {
-                                "mapping": {
-                                    "@foreach($.returns,index)": {
-                                        "key": "=$loop.key",
-                                        "value": "=$loop.value"
-                                    }
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"key\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "getRecord"
+            },
+            {
+                "description": "retrieve records by recID",
+                "settings": {
+                    "name": "getRecordsByID",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:getRecordsByID"
+                    },
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "recID": "=$.parameters.recID"
+                            }
+                        }
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
                                 }
                             }
                         }
-                    },
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
                     "reply": {
-                        "message": ""
+                        "returns": "schema://AuditLedgerMap"
                     },
-                    "schemas": {
-                        "reply": {
-                            "returns": "schema://AuditLedgerMap"
-                        },
-                        "output": {
-                            "parameters": {
-                                "type": "json",
-                                "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"domain\":{\"type\":\"string\"},\"owner\":{\"type\":\"string\"},\"startTime\":{\"type\":\"string\"},\"endTime\":{\"type\":\"string\"}}}",
-                                "fe_metadata": "{\n    \"domain\": \"\",\n    \"owner\": \"\",\n    \"startTime\": \"\",\n    \"endTime\": \"\"\n}"
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"recID\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"recID\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "getRecordsByID"
+            },
+            {
+                "description": "retrieve audit records by the txID of the record creation",
+                "settings": {
+                    "name": "getRecordsByTxID",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:getRecordsByTxID"
+                    },
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "txID": "=$.parameters.txID"
                             }
                         }
                     },
-                    "name": "queryTimeRange"
-                }
-            ]
-        }
-    ],
-    "resources": [
-        {
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
+                                }
+                            }
+                        }
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedgerMap"
+                    },
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txID\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"txID\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "getRecordsByTxID"
+            },
+            {
+                "description": "retrieve audit records created at the specified time",
+                "settings": {
+                    "name": "getRecordsByTxTime",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:getRecordsByTxTime"
+                    },
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "txTime": "=$.parameters.txTime"
+                            }
+                        }
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
+                                }
+                            }
+                        }
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedgerMap"
+                    },
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txTime\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"txTime\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "getRecordsByTxTime"
+            },
+            {
+                "description": "delete current state of an audit record of specified state key",
+                "settings": {
+                    "name": "deleteRecord",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:deleteRecord"
+                    },
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "key": "=$.parameters.key"
+                            }
+                        }
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": "=$.returns"
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedger"
+                    },
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"key\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"key\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "deleteRecord"
+            },
+            {
+                "description": "delete all audit states created by a specified transaction id",
+                "settings": {
+                    "name": "deleteTransaction",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:deleteTransaction"
+                    },
+                    "input": {
+                        "parameters": {
+                            "mapping": {
+                                "txID": "=$.parameters.txID"
+                            }
+                        }
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
+                                }
+                            }
+                        }
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedgerMap"
+                    },
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"txID\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"txID\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "deleteTransaction"
+            },
+            {
+                "description": "retrieve audit records of specified domain and owner in a time range",
+                "settings": {
+                    "name": "queryTimeRange",
+                    "validation": false
+                },
+                "action": {
+                    "ref": "github.com/project-flogo/flow",
+                    "settings": {
+                        "flowURI": "res://flow:queryTimeRange"
+                    },
+                    "input": {
+                        "parameters": "=$.parameters"
+                    },
+                    "output": {
+                        "status": "=$.status",
+                        "message": "=$.message",
+                        "returns": {
+                            "mapping": {
+                                "@foreach($.returns,index)": {
+                                    "key": "=$loop.key",
+                                    "value": "=$loop.value"
+                                }
+                            }
+                        }
+                    }
+                },
+                "reply": {
+                    "message": ""
+                },
+                "schemas": {
+                    "reply": {
+                        "returns": "schema://AuditLedgerMap"
+                    },
+                    "output": {
+                        "parameters": {
+                            "type": "json",
+                            "value": "{\"$schema\":\"http://json-schema.org/draft-04/schema#\",\"type\":\"object\",\"properties\":{\"domain\":{\"type\":\"string\"},\"owner\":{\"type\":\"string\"},\"startTime\":{\"type\":\"string\"},\"endTime\":{\"type\":\"string\"}}}",
+                            "fe_metadata": "{\n    \"domain\": \"\",\n    \"owner\": \"\",\n    \"startTime\": \"\",\n    \"endTime\": \"\"\n}"
+                        }
+                    }
+                },
+                "name": "queryTimeRange"
+            }
+        ]
+    }],
+    "resources": [{
             "id": "flow:createAudit",
             "data": {
                 "name": "createAudit",
                 "description": "store audit log records on chain",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "PutAll",
@@ -416,8 +411,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -508,8 +502,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -526,8 +519,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -556,8 +548,7 @@
             "data": {
                 "name": "getRecord",
                 "description": "retrieve an audit record by its state key",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "Get",
@@ -576,8 +567,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -637,8 +627,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -655,8 +644,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -685,8 +673,7 @@
             "data": {
                 "name": "getRecordsByID",
                 "description": "retrieve records by recID",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "GetByCompositeKey",
@@ -705,8 +692,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -788,8 +774,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -806,8 +791,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -836,8 +820,7 @@
             "data": {
                 "name": "getRecordsByTxID",
                 "description": "retrieve audit records by the txID of the record creation",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "GetByCompositeKey",
@@ -856,8 +839,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -939,8 +921,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -957,8 +938,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -987,8 +967,7 @@
             "data": {
                 "name": "getRecordsByTxTime",
                 "description": "retrieve audit records created at the specified time",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "GetByCompositeKey",
@@ -1007,8 +986,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -1090,8 +1068,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -1108,8 +1085,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -1138,8 +1114,7 @@
             "data": {
                 "name": "deleteRecord",
                 "description": "delete current state of an audit record of specified state key",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "Delete",
@@ -1158,8 +1133,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -1221,8 +1195,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -1239,8 +1212,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -1269,8 +1241,7 @@
             "data": {
                 "name": "deleteTransaction",
                 "description": "delete all audit states created by a specified transaction id",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "GetByCompositeKey",
@@ -1295,8 +1266,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -1413,8 +1383,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -1431,8 +1400,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -1461,8 +1429,7 @@
             "data": {
                 "name": "logDelete",
                 "description": "delete an audit record of a specified state key, and log the result",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "Delete",
@@ -1481,8 +1448,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -1543,14 +1509,11 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
-                            "name": "key",
-                            "type": "string"
-                        }
-                    ],
-                    "output": [
-                        {
+                    "input": [{
+                        "name": "key",
+                        "type": "string"
+                    }],
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -1571,8 +1534,7 @@
             "data": {
                 "name": "queryTimeRange",
                 "description": "retrieve audit records of specified domain and owner in a time range",
-                "links": [
-                    {
+                "links": [{
                         "id": 1,
                         "from": "Log",
                         "to": "Query",
@@ -1591,8 +1553,7 @@
                         "type": "default"
                     }
                 ],
-                "tasks": [
-                    {
+                "tasks": [{
                         "id": "Log",
                         "name": "Log",
                         "description": "",
@@ -1670,8 +1631,7 @@
                     }
                 ],
                 "metadata": {
-                    "input": [
-                        {
+                    "input": [{
                             "name": "parameters",
                             "type": "object",
                             "schema": {
@@ -1688,8 +1648,7 @@
                             "type": "string"
                         }
                     ],
-                    "output": [
-                        {
+                    "output": [{
                             "name": "status",
                             "type": "float64"
                         },
@@ -1714,13 +1673,11 @@
             }
         }
     ],
-    "properties": [
-        {
-            "name": "CompositeKeys.AuditIndex",
-            "type": "string",
-            "value": "txID=txID;txTime=txTime;recID=recID"
-        }
-    ],
+    "properties": [{
+        "name": "CompositeKeys.AuditIndex",
+        "type": "string",
+        "value": "txID=txID;txTime=txTime;recID=recID"
+    }],
     "schemas": {
         "AuditLedgerMap": {
             "type": "json",

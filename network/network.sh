@@ -1026,7 +1026,7 @@ function execUtil {
     docker exec -it cli.${FABRIC_ORG} bash -c "./${_cmd}"
   else
     echo "use k8s - ${_cmd}"
-    kubectl exec -it cli.${FABRIC_ORG} -n ${ORG} -- bash -c "./${_cmd}"
+    kubectl exec -it cli -n ${ORG} -- bash -c "./${_cmd}"
   fi
 }
 
@@ -1298,6 +1298,7 @@ function invokeChaincode {
       peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peer-0/tls/ca.crt"
     else
       mkdir -p ${cliRoot}/crypto/${org}/tls
+      # TODO: handle this more generally, it is the same as ${DATA_ROOT}/crypto/msp/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem
       ${sucp} ${DATA_ROOT}/cli/crypto/peer-0/tls/ca.crt ${cliRoot}/crypto/${org}/tls
       peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${org}/tls/ca.crt"
     fi

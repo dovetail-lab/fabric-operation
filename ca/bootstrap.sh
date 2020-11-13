@@ -105,15 +105,18 @@ for o in "${ORGS[@]}"; do
     ORDERER_DATA_ROOT=${DATA_ROOT}
     echo "ORDERER_DATA_ROOT: ${ORDERER_DATA_ROOT}"
   else
+    # TODO: orderer tool need crypto/msp of all peer-orgs, name the folder ${FABRIC_ORG} instead of ${ORG}
     echo "copy tools data from ${DATA_ROOT} to ${ORDERER_DATA_ROOT}"
     if [ ! -d "${ORDERER_DATA_ROOT}/tool/crypto/${ORG}" ]; then
       cp -R ${DATA_ROOT}/tool/crypto/msp ${ORDERER_DATA_ROOT}/tool/crypto/${ORG}
     fi
+    # TODO: handle this generally, cli need crypto/msp/tlscacerts from orderer and other peer-orgs (ref network.sh)
     echo "copy cli data from ${ORDERER_DATA_ROOT}" to ${DATA_ROOT}
     if [ ! -d "${DATA_ROOT}/cli/crypto/orderer-0/msp" ]; then
       mkdir -p ${DATA_ROOT}/cli/crypto/orderer-0/msp
       cp -R ${ORDERER_DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/cli/crypto/orderer-0/msp 
     fi
+    # TODO: gateway need crypto/msp/tlscacerts from orderer
   fi
 done
 
