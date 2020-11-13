@@ -83,80 +83,66 @@ After login, you'll notice that everything is automatically setup for you. You m
 
 ## Start and test Hyperledger Fabric network
 
-Following steps will start and smoke test the default Hyperledger Fabric network with 2 peers, and 3 orderers using `etcd raft` consensus. You can learn more details about these commands [here](../README.md).
-
-### Create namespace for the network operator
-
-```bash
-cd fabric-operation/namespace
-./k8s-namespace.sh create
-```
-
-This command creates a namespace for the default Fabric operator company, `netop1`, and sets it as the default namespace. The option `-t aws` specifies the working environment for `AWS`, and it is optional since the script will automatically detect the environment if it is not specified. You can verify this step using the following commands:
-
-- `kubectl get namespaces` should show a list of namespaces, including the new namespace `netop1`;
-- `kubectl config current-context` should show that the default namespace is set to `netop1`.
+Following steps will start and smoke test the default Hyperledger Fabric network with 2 peers by each of 2 orgs, and 3 orderers using `etcd raft` consensus. You can learn more details about these commands [here](../README.md).
 
 ### Start CA server and create crypto data for the Fabric network
 
 ```bash
 cd ../ca
-./ca-server.sh start
-# wait until 3 ca server and client PODs are in running state
-./ca-crypto.sh bootstrap
-
-# optionally shutdown ca to save some resources
-./ca-server.sh shutdown
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
-This command starts 2 CA servers and a CA client, and generates crypto data according to the network specification, [netop1.env](../config/netop1.env). You can verify the result using the following commands:
+This command starts 2 CA servers and a CA client for each organization, and generates crypto data according to the network specification, [orderer.env](../config/orderer.env), [org1.env](../config/org1.env) and [org2.env](../config/org2.env). You can verify the result using the following commands:
 
-- `kubectl get pod,svc` should list 3 running PODs: `ca-server`, `tlsca-server`, and `ca-client`;
-- `ls /mnt/share/netop1.com/` should list folders containing crypto data, i.e., `canet`, `cli`, `crypto`, `gateway`, `namespace`, `orderers`, `peers`, and `tool`.
+```bash
+ls /mnt/share/orderer.example.com/
+```
+
+It should list folders containing crypto data, i.e., `canet`, `cli`, `crypto`, `gateway`, `namespace`, `orderers`, and `tool`.
 
 ### Generate genesis block and channel creation tx
 
 ```bash
 cd ../msp
-./msp-util.sh start
-# wait until the tool POD is in running state
-./msp-util.sh bootstrap
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
 This command starts a Kubernetes POD to generate the genesis block and transaction for creating a test channel `mychannel` based on the network specification. You can verify the result using the following commands:
 
-- `kubectl get pods` should list a running POD `tool`;
-- `ls /mnt/share/netop1.com/tool` should show the generated artifacts: `etcdraft-genesis.block`, `mychannel.tx`, `mychannel-anchors.tx`, and `configtx.yaml`.
+- `kubectl get pods -n orderer` should list a running POD `tool`;
+- `ls /mnt/share/orderer.example.com/tool` should show the generated artifacts: `orderer-genesis.block`, `mychannel.tx`, `mychannel-anchors-org1MSP.tx`, and `configtx.yaml`.
 
 ### Start Fabric network
 
 ```bash
 cd ../network
-./network.sh start
+./network.sh start -o orderer -p org1 -p org2
 ```
 
 This command starts the orderers and peers using the crypto and genesis block created in the previous steps. You can verify the network status using the following commands:
 
-- `kubectl get pod,svc` should list 3 running orderers and 2 running peers;
-- `kubectl logs orderer-2` should show that a raft leader is elected by all 3 orderer nodes;
-- `kubectl logs peer-1 -c peer` should show the logs of `peer-1`, that shows its successfully completed gossip communications with `peer-0`.
-- `ls /mnt/share/netop1.com/orderers/orderer-0/data` shows persistent storage of the `orderer-0`, similar to other orderer nodes;
-- `ls /mnt/share/netop1.com/peers/peer-0/data` shows persistent storage of the `peer-0`, similar to other peer nodes.
+- `kubectl get pod,svc --all-namespaces` should list 3 running orderers 4 running peers and 2 cli containers;
+- `kubectl logs orderer-2 -n orderer` should show that a raft leader is elected by all 3 orderer nodes;
+- `kubectl logs peer-1 -c peer -n org1` should show the logs of `peer-1`, that shows its successfully completed gossip communications with `peer-0`.
+- `ls /mnt/share/orderer.example.com/orderers/orderer-0/data` shows persistent storage of the `orderer-0`, similar to other orderer nodes;
+- `ls /mnt/share/org1.example.com/peers/peer-0/data` shows persistent storage of the `peer-0`, similar to other peer nodes.
 
 ### Smoke test of the Fabric network
 
 ```bash
 cd ../network
-./network.sh test
+./smoke-test.sh
 ```
 
-This command creates the test channel `mychannel`, installs and instantiates a test chaincode, and then executes a transaction and a query to verify the working network. You can verify the result as follows:
+This command creates the test channel `mychannel`, installs and instantiates the sample chaincode `sacc`, and then executes a transaction and a query to verify the working network. You can verify the result as follows:
 
-- The last result printed out by the test should be `90`;
-- Orderer data folder, e.g., `/mnt/share/netop1.com/orderers/orderer-0/data` would show a block file added under the chain of a new channel `chains/mychannel`;
-- Peer data folder, e.g., `/mnt/share/netop1.com/peers/peer-0/data` would show a new chaincode `mycc.1.0` added in the `chaincodes` folder, and a transaction block file created under `ledgersData/chains/chains/mychannel`.
+- The last result printed out by the test should be `100`;
+- Orderer data folder, e.g., `/mnt/share/orderer.example.com/orderers/orderer-0/data` would show a block file added under the chain of a new channel `chains/mychannel`;
+- Peer data folder, e.g., `/mnt/share/org1.example.com/peers/peer-0/data` would show a new chaincode `sacc_1.0` added in the `lifecycle/chaincodes` folder, and a transaction block file created under `ledgersData/chains/chains/mychannel`.
 
 ### Start client gateway service and use REST APIs to test chaincode
+
+TODO: updated required here.
 
 Refer [gateway](../service/README.md) for more details on how to build and start a REST API service for applications to interact with one or more Fabric networks. The following command starts a gateway service from the bastion host by using the pre-built executable `gateway-linux`.
 
@@ -249,13 +235,13 @@ Stop the client app after tests complete:
 
 ```bash
 cd ../network
-./network.sh shutdown -d
+./network.sh shutdown -o orderer -p org1 -p org2 -d
 ```
 
 This command shuts down orderers and peers, and the last argument `-d` means to delete all persistent data as well. If you do not provide the argument `-d`, it would keep the test ledger files on the `EFS` file system, and so it can be loaded when the network restarts. You can verify the result using the following command.
 
-- `kubectl get svc,pod` should not list any running orderers or peers;
-- The orderers and peers' persistent data folder, e.g., `/mnt/share/netop1.com/peers/peer-0/data` would be deleted if the argument `-d` is used.
+- `kubectl get svc,pod --all-namespaces` should not list any running orderers or peers;
+- The orderers and peers' persistent data folder, e.g., `/mnt/share/org1.example.com/peers/peer-0/data` would be deleted if the argument `-d` is used.
 
 ## Clean up all AWS artifacts
 
@@ -290,12 +276,12 @@ kubectl get pod,svc --all-namespaces
 
 ### Set default Kubernetes namespace
 
-The containers created by the scripts will use the name of a specified operating company, e.g., `netop1`, as the Kubernetes namespace. To save you from repeatedly typing the namespace in `kubectl` commands, you can set `netop1` as the default namespace by using the following commands:
+The containers created by the scripts will use the name of a specified organization, e.g., `org1`, as the Kubernetes namespace. To save you from repeatedly typing the namespace in `kubectl` commands, you can set `org1` as the default namespace by using the following commands:
 
 ```bash
 kubectl config view
-kubectl config set-context netop1 --namespace=netop1 --cluster=fab-eks-stack.us-west-2.eksctl.io --user=1572660907000277000@fab-eks-stack.us-west-2.eksctl.io
-kubectl config use-context netop1
+kubectl config set-context org1 --namespace=netop1 --cluster=fab-eks-stack.us-west-2.eksctl.io --user=1572660907000277000@fab-eks-stack.us-west-2.eksctl.io
+kubectl config use-context org1
 ```
 
 Note to replace the values of `cluster` and `user` in the second command by the corresponding output from the first command. This configuration is automatically done on the bastion host when the [`k8s-namespace.sh create`](../namespace/k8s-namespace.sh) script is executed.

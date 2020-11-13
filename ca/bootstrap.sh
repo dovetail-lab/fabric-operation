@@ -116,7 +116,7 @@ for o in "${ORGS[@]}"; do
       mkdir -p ${DATA_ROOT}/cli/crypto/orderer-0/msp
       cp -R ${ORDERER_DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/cli/crypto/orderer-0/msp 
     fi
-    # TODO: gateway need crypto/msp/tlscacerts from orderer
+    # TODO: gateway need crypto/msp/tlscacerts from orderer and other peer-orgs
   fi
 done
 

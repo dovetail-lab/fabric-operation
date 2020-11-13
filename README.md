@@ -1,10 +1,10 @@
 # fabric-operation
 
-This package contains scripts that let you define, create, and test a Hyperledger Fabric network in Kubernetes locally or in a cloud. Supported cloud services include AWS, Azure, and Google Cloud. The fabric network parameters can be specified by a property file, e.g., the sample network, [netop1.env](./config/netop1.env).
+This package contains scripts that let you define, create, and test a Hyperledger Fabric network in Kubernetes locally or in a cloud. Supported cloud services include AWS, Azure, and Google Cloud. The fabric network can be specified by simple property files of the orderer and peer organizations, e.g., a sample network can be configured by an order organization [orderer.env](./config/orderer.env) and two peer organizations [org1.env](./config/org1.env) and [org2.env](.config/org2.env).
 
-The scripts support both `docker-compose` and `kubernetes`. All steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
+Once the organizations are configured, you can bootstrap the fabric network by using scripts in this repo, and run the network in either `docker-compose` or `kubernetes`. All the execution steps are done in docker containers, and thus you can get a Fabric network running without pre-downloading any artifact of Hyperledger Fabric.
 
-This utility is implemented using bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric applications developed in [dovetail](https://github.com/dovetail-lab/dovetail), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
+This repo uses only bash scripts, and thus it does not depend on any other scripting tool or framework. It supports Hyperledger Fabric applications developed in [dovetail](https://github.com/dovetail-lab/dovetail), which is a zero-code visual programming tool for modeling Hyperledger Fabric chaincode and client apps. A complete end-to-end sample to deploy a dovetail app in Azure AKS cluster can be found in [jabil_aim](https://github.com/dovetail-lab/fabric-samples/tree/master/jabil-aim).
 
 ## Prerequisites
 
@@ -19,16 +19,52 @@ This utility is implemented using bash scripts, and thus it does not depend on a
   - For Azure, refer the scripts and instructions in the [az folder](./az).
   - For Google cloud, refer the scripts and instructions in the [gcp folder](./gcp)
 
-## Prepare Kubernetes namespace
+## Download Dovetail projects and Hyperledger Fabric samples
 
-This step assumes that you use Kubernetes of the `Docker Desktop` on Mac. If you plan to use `docker-compose`, skip to the end of this instruction on [Non-Mac Users](#non-mac-users).
+To get-started for local development, you can set setup the environment as described [here](https://github.com/dovetail-lab/fabric-cli/blob/master/README.md).
+
+## Start CA server and generate crypto data
+
+Following steps use `docker-desktop` Kubernetes on Mac to start `fabric-ca` PODs and generate crypto data required by the sample network operated by 3 organizations, [orderer](./config/orderer.env), [org1](./config/org1.env), and [org2](./config/org1.env).
 
 ```bash
-cd ./namespace
-./k8s-namespace.sh create
+cd ../ca
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
-This command creates a namespace for the default Fabric operator company, `netop1`. It also sets `netop1` as the default namespace, so you won't have to specify the namespace in the subsequent `kubectl` commands.
+The will create crypto data required to support 3 orderers and 2 peers each for `org1` and `org2` as defined in the org's configuration files. You can edit the configuration files, e.g., [orderer.env](./config/orderer.env) if you want to use a different organization name, or run more orderer or peer nodes. The generated crypto data will be stored in the local folder `/path/to/dovetail-lab/fabric-operation/<org-name>`, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore when the above script is executed in the bastion host of a cloud provider.
+
+## Generate MSP definition and genesis block
+
+The following script generates a genesis block for the sample network in Kubernetes using 3 orderers with `etcd raft` consensus, as well as channel artifacts for creating a test channel `mychannel`.
+
+```bash
+cd ../msp
+./bootstrap.sh -o orderer -p org1 -p org2 -d
+```
+
+## Start the Fabric network
+
+The following script will start and test the sample fabric network by using the `docker-desktop` Kubernetes on a Mac:
+
+```bash
+cd ./network
+./network.sh start -o orderer -p org1 -p org2
+```
+
+Verify that all orderer and peer nodes are running by using `kubectl`, e.g.,
+
+```bash
+kubectl get pod,svc --all-namespaces
+```
+
+After the network startup, use `kubectl logs orderer-2 -n orderer` to check RAFT leader election result. When RAFT leader is elected, the log should show
+
+```
+INFO 101 Raft leader changed: 0 -> 2 channel=netop1-channel node=2
+```
+
+Note that the scripts use organization names, e.g, `org1`, as the Kubernetes namespace of corresponding processes, and so it can support multiple member organizations. If you want to reset the default namespace, you can use the following command:
 
 To revoke to the default namespace for `docker-desktop`, you can use the following command:
 
@@ -36,90 +72,22 @@ To revoke to the default namespace for `docker-desktop`, you can use the followi
 kubectl config use-context docker-desktop
 ```
 
-## Start CA server and generate crypto data
+## Smoke test by deploying sample chaincode `sacc`
 
-Following steps use `docker-desktop` Kubernetes on Mac to start `fabric-ca` PODs and generate crypto data required by the sample network, `netop1`.
-
-```bash
-cd ../ca
-# cleanup old ca-server data
-rm -R ../netop1.com/canet
-./ca-server.sh start
-# wait until the 3 PODs for ca server and client are in running state
-./ca-crypto.sh bootstrap
-```
-
-You can edit the network specification [netop1.env](./config/netop1.env) if you want to use a different operating company name, or make it run more orderer or peer nodes. The generated crypto data will be stored in the local folder `/path/to/dovetail-lab/fabric-operation/netop1.com/netop1.com`, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore.
-
-These scripts take 2 additional parameters, e.g.,
-
-```bash
-./ca-server.sh start -p <config_file> -t <env_type>
-./ca-crypto.sh bootstrap -p <config_file> -t <env_type>
-```
-
-where `config_file` is file in the [config](./config) folder with a suffix `.env` that contains the fabric network specification; `env_type` can be `k8s`, `docker`, `aws`, `az` or `gcp`. When no parameter is specified, it uses default `-p netop1 -t k8s` on local PC. Refer [ca](./ca) folder for more detailed description of these scripts.
-
-- `k8s` uses the local `docker-desktop` kubernetes on Mac. Non-Mac users may use `docker` option below, or try Minikube (which has not been tested).
-- `docker` uses `docker-compose`.
-- `aws` uses AWS EKS when executed on a `bastion` host of an EC2 instance. Refer the folder [aws](./aws) for more details on AWS.
-- `az` uses Azure AKS when executed on a `bastion` VM instance in Azure. Refer the folder [az](./az) for more details on Azure.
-  More cloud support will be added in the future.
-- `gcp` uses Google GKE when executed on a `bastion` host in Google Cloud. Refer the folder [gcp](./gcp) for more details on Google Cloud.
-
-## Sample crypto data
-
-When the above steps are executed on local PC, the crypto data will be stored in [netop1.com](./netop1.com/), which is specified by `FABRIC_ORG` in the network definition file [netop1.env](./config/netop1.env). The resulting crypto data is similar to that generated by the fabric `cryptogen` tool as demonstrated by [fabric-samples](https://github.com/hyperledger/fabric-samples). However, by using a fabric CA server in the above step, the generated certificates will include a few extra attributes that would make them usable for cloud deployment using kubernetes, as well as attribute-based-access-control (ABAC). Besides, CA server is also more flexible for generating certificates for more nodes and users in production environment as the network grows. Although the CA servers use a self-signed root CA for simplicity, you may supply your real root CA for production deployment.
-
-## Generate MSP definition and genesis block
-
-The following script generates a genesis block for the sample network in Kubernetes using 2 peers and 3 orderers with `etcd raft` consensus.
-
-```bash
-cd ../msp
-./msp-util.sh start
-# wait until the too POD is running
-./msp-util.sh bootstrap
-```
-
-It also generates transactions for creating a test channel, `mychannel`. Similar to other scripts, this command also accepts 2 parameters, e.g.,
-
-```bash
-./msp-util.sh start -p <config_file> -t <env_type>
-./msp-util.sh bootstrap -p <config_file> -t <env_type>
-```
-
-so you can specify a different network definition file, or generate artifacts for other deployment environment, e.g., `docker`, `aws`, `az`, or `gcp`. Refer [msp](./msp) folder for more detailed description of these scripts.
-
-## Start and smoke test the Fabric network
-
-The following script will start and test the sample fabric network by using the `docker-desktop` Kubernetes on a Mac:
+The smoke test script [smoke-test.sh](./network/smoke-test.sh) creates the test channel `mychannel`, make 4 peer nodes join the channel, then package, deploy, and invoke the sample chaincode [sacc](https://github.com/hyperledger/fabric-samples/tree/master/chaincode/sacc).
 
 ```bash
 cd ./network
-./network.sh start
-# wait until 3 orderer and 2 peer nodes are running, Raft leader is elected in orderers
-./network.sh test
-./network.sh shutdown
+./smoke-test.sh
 ```
 
-After the network startup, use `kubectl logs orderer-2` to check RAFT leader election result. When RAFT leader is elected, the log should show
+You should see that the chaincode invocation created a ledger record that sets `a = 100`, and the query afterwards returned the value `100`.
 
-```
-INFO 101 Raft leader changed: 0 -> 2 channel=netop1-channel node=2
-```
-
-Before you shutdown the network, you can verify the running fabric containers by using `kubectl`, e.g.,
-
-```bash
-kubectl get pod,svc -n netop1
-```
-
-Note that the scripts use the operating company name `netop1`, as a Kubernetes namespace, and so they can support multiple member organizations.
-
-After the smoke test succeeds, you should see a test result of `90` printed on the screen. If you used `docker-compose` for this excersize (as described below), you can look at the blockchain state via the `CouchDB` futon UI at `http://localhost:7056/_utils`, which is exposed for `docker-compose` only because it is not recommended to expose `CouchDB` in production configuration using Kubernetes.
+If you used `docker-compose` for this excersize (as described below), you can look at the blockchain state via the `CouchDB` futon UI at `http://localhost:7056/_utils`, which is exposed for `docker-compose` only because it is not recommended to expose `CouchDB` in production configuration using Kubernetes.
 
 ## Start gateway service and use REST APIs to test chaincode
+
+TODO: update required here ...
 
 Refer [gateway](./service/README.md) for more details on how to build and start a REST API service for applications to interact with one or more Fabric networks. The following commands will start a gateway service that exposes a Swagger-UI at `http://localhost:30081/swagger`.
 
@@ -129,6 +97,8 @@ cd ../service
 ```
 
 ## Operations for managing the Fabric network
+
+TODO: update required here ...
 
 The above bootstrap network is for a single operating company to start a Fabric network with its own orderer and peer nodes of pre-configured size. A network in production will need to scale up and let more organizations join and co-operate. Organizations may create their own Kubernetes networks using the same or different cloud service providers. We provide scripts to support such network activities.
 
@@ -146,29 +116,24 @@ Refer [operations](./operations.md) for description of these activities. More op
 
 If you are not using a Mac, you can run these scripts using `docker-compose`, `Amazon EKS`, `Azure AKS`, or `Google GKE`. Simply add a corresponding `env_type` in all the commands, e.g.,
 
-- `./ca-server.sh start -t docker` to use `docker-composer`, or
-- `./ca-server.sh start -t aws` to use AWS as described in the folder [aws](./aws), or
-- `./ca-server.sh start -t az` to use Azure as described in the folder [az](./az), or
-- `./ca-server.sh start -t gcp` to use Google Cloud as described in the folder [gcp](./gcp), or
+- `./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d` to use `docker-composer`, or
+- execute the command on bastion host in cloud as described for Amazon WebService [aws](./aws), Microsoft Azue [az](./az), or Google Cloud [gcp](./gcp), or
 - try to verify if the scripts would work on [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
 
-When `docker-compose` is used, generate artifacts and start and test the Fabric network using the following commands:
+When `docker-compose` is used locally, the commands are as follows:
 
 ```bash
 cd ./ca
-./ca-server.sh start -t docker
-./ca-crypto.sh bootstrap -t docker
-./ca-server.sh shutdown -t docker
+./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d
 
 cd ../msp
-./msp-util.sh start -t docker
-./msp-util.sh bootstrap -t docker
-./msp-util.sh shutdown -t docker
+./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d
 
 cd ../network
-./network.sh start -t docker
-./network.sh test -t docker
-./network.sh shutdown -t docker
+./network.sh start -t docker -o orderer -p org1 -p org2
+
+docker ps -a
+./smoke-test.sh docker
 ```
 
 ## TODO
