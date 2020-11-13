@@ -8,8 +8,8 @@
 #   if the optional target env is az, create the storage account secret based on config file in $HOME/.azure/store-secret
 # usage: k8s-namespace.sh <cmd> [-p <property file>] [-t <env type>]
 # where property file is specified in ../config/org_name.env, e.g.
-#   k8s-namespace.sh create -p netop1 -t az
-# use config parameters specified in ../config/netop1.env
+#   k8s-namespace.sh create -p org1 -t az
+# use config parameters specified in ../config/org1.env
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 
@@ -93,15 +93,17 @@ function printHelp() {
   echo "    <cmd> - one of 'create', or 'delete'"
   echo "      - 'create' - create k8s namespace for the organization defined in network spec; for Azure, also create storage secret"
   echo "      - 'delete' - delete k8s namespace, for Azure, also delete the storage secret"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., org1 (default)"
   echo "    -t <env type> - deployment environment type: one of 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "  k8s-namespace.sh -h (print this message)"
 }
 
-ORG_ENV="netop1"
+ORG_ENV="org1"
 
 CMD=${1}
-shift
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
 while getopts "h?p:t:" opt; do
   case "$opt" in
   h | \?)

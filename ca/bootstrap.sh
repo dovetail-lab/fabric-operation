@@ -15,29 +15,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 cd ${SCRIPT_DIR}
 
 # wait for CA server and client containers of specified org, e.g.
-# waitForCA org1
+# waitForCA
 function waitForCA {
   local ups=0
   if [ "${ENV_TYPE}" == "docker" ]; then
-    ups=$(docker ps -f "status=running" | egrep "ca.${1}|caclient.${1}" | wc -l)
+    ups=$(docker ps -f "status=running" | egrep "ca.${FABRIC_ORG}|caclient.${FABRIC_ORG}" | wc -l)
     local retry=1
     until [ ${ups} -ge 3 ] || [ ${retry} -gt 10 ]; do
       sleep 5s
       echo -n "."
-      ups=$(docker ps -f "status=running" | egrep "ca.${1}|caclient.${1}" | wc -l)
+      ups=$(docker ps -f "status=running" | egrep "ca.${FABRIC_ORG}|caclient.${FABRIC_ORG}" | wc -l)
       retry=$((${retry}+1))
     done
   else
-    ups=$(kubectl get pod | egrep 'ca-client|ca-server|tlsca-server' | grep Running | wc -l)
+    ups=$(kubectl get pod -n ${ORG} | egrep 'ca-client|ca-server|tlsca-server' | grep Running | wc -l)
     local retry=1
     until [ ${ups} -ge 3 ] || [ ${retry} -gt 20 ]; do
       sleep 5s
       echo -n "."
-      ups=$(kubectl get pod | egrep 'ca-client|ca-server|tlsca-server' | grep Running | wc -l)
+      ups=$(kubectl get pod -n ${ORG} | egrep 'ca-client|ca-server|tlsca-server' | grep Running | wc -l)
       retry=$((${retry}+1))
     done
   fi
-  echo "CA container count for ${1}: ${ups}"
+  echo "CA container count for ${ORG}: ${ups}"
 }
 
 # Print the usage message
@@ -85,8 +85,16 @@ done
 
 for org in "${ORGS[@]}"; do 
   echo "start CA server for $org"
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${org} ${ENV_TYPE}
+  if [ "${ENV_TYPE}" != "docker" ]; then
+    echo "check if namespace ${ORG} exists"
+    kubectl get namespace ${ORG}
+    if [ "$?" -ne 0 ]; then
+      ../namespace/k8s-namespace.sh create -p ${ORG}
+    fi
+  fi
   ./ca-server.sh start -t "${ENV_TYPE}" -p ${org}
-  waitForCA ${org}
+  waitForCA
 done
 
 for o in "${ORGS[@]}"; do
@@ -95,7 +103,7 @@ for o in "${ORGS[@]}"; do
   ./ca-crypto.sh bootstrap -t "${ENV_TYPE}" -p ${o}
   if [ "${o}" == "${ORDERER_ORG}" ]; then
     ORDERER_DATA_ROOT=${DATA_ROOT}
-    echo "ORDERER_DATA_ROOT: ${DATA_ROOT}"
+    echo "ORDERER_DATA_ROOT: ${ORDERER_DATA_ROOT}"
   else
     echo "copy tools data from ${DATA_ROOT} to ${ORDERER_DATA_ROOT}"
     if [ ! -d "${ORDERER_DATA_ROOT}/tool/crypto/${ORG}" ]; then

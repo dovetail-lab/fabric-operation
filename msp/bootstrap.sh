@@ -15,29 +15,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
 cd ${SCRIPT_DIR}
 
 # wait for tool container of specified org, e.g.
-# waitForTool orderer
+# waitForTool
 function waitForTool {
   local ups=0
   if [ "${ENV_TYPE}" == "docker" ]; then
-    ups=$(docker ps -f "status=running" | grep "tool.${1}" | wc -l)
+    ups=$(docker ps -f "status=running" | grep "tool.${FABRIC_ORG}" | wc -l)
     local retry=1
-    until [ ${ups} -gt 0 ] || [ ${retry} -gt 10 ]; do
+    until [ ${ups} -gt 0 ] || [ ${retry} -gt 20 ]; do
       sleep 5s
       echo -n "."
-      ups=$(docker ps -f "status=running" | grep "tool.${1}" | wc -l)
+      ups=$(docker ps -f "status=running" | grep "tool.${FABRIC_ORG}" | wc -l)
       retry=$((${retry}+1))
     done
   else
-    ups=$(kubectl get pod | grep 'tool' | grep Running | wc -l)
+    ups=$(kubectl get pod -n ${ORG} | grep 'tool' | grep Running | wc -l)
     local retry=1
-    until [ ${ups} -gt 0 ] || [ ${retry} -gt 10 ]; do
+    until [ ${ups} -gt 0 ] || [ ${retry} -gt 20 ]; do
       sleep 5s
       echo -n "."
-      ups=$(kubectl get pod | grep 'tool' | grep Running | wc -l)
+      ups=$(kubectl get pod -n ${ORG} | grep 'tool' | grep Running | wc -l)
       retry=$((${retry}+1))
     done
   fi
-  echo "Tool container count for ${1}: ${ups}"
+  echo "Tool container count for ${ORG}: ${ups}"
 }
 
 # Print the usage message
@@ -86,7 +86,7 @@ done
 echo "specified peers args: $peers"
 echo "start tool container for $ORDERER_ORG"
 ./msp-util.sh start -t ${ENV_TYPE} -o $ORDERER_ORG $peers
-waitForTool ${ORDERER_ORG}
+waitForTool
 
 echo "bootstrap genesis and channels for $ORDERER_ORG"
 ./msp-util.sh bootstrap -t ${ENV_TYPE} -o $ORDERER_ORG $peers

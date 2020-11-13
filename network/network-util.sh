@@ -4,39 +4,6 @@
 # This file is subject to the license terms contained
 # in the license file that is distributed with this file.
 
-# Run this script in cli docker container to create channel and test a sample chaincode
-# usage: network-util.sh test
-
-function test {
-  createChannel ${TEST_CHANNEL}
-  if [ "$?" -ne 0 ]; then
-    return 1
-  fi
-  joinChannel "peer-0" ${TEST_CHANNEL} "anchor"
-  if [ "$?" -ne 0 ]; then
-    return 1
-  fi
-  joinChannel "peer-1" ${TEST_CHANNEL}
-  if [ "$?" -ne 0 ]; then
-    return 1
-  fi
-
-  packageChaincode "peer-0" "chaincode_example02/go" "mycc"
-  installChaincode "peer-0" "mycc_1.0.cds"
-  installChaincode "peer-1" "mycc_1.0.cds"
-  instantiateChaincode "peer-0" ${TEST_CHANNEL} "mycc" "1.0" '{"Args":["init","a","100","b","200"]}'
-
-  echo "Wait 10s before testing chaincode ..."
-  sleep 10
-  queryChaincode "peer-1" ${TEST_CHANNEL} "mycc" '{"Args":["query","a"]}'
-  invokeChaincode "peer-0" ${TEST_CHANNEL} "mycc" '{"Args":["invoke","a","b","10"]}'
-
-  echo "wait 5s for transaction to commit ..."
-  sleep 5
-  echo "Following query should return 90"
-  queryChaincode "peer-0" ${TEST_CHANNEL} "mycc" '{"Args":["query","a"]}'
-}
-
 # createChannel <channel>
 function createChannel {
   echo "check if channel ${1} exists"

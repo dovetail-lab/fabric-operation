@@ -191,10 +191,6 @@ function printCliService {
   local admin=${ADMIN_USER:-"Admin"}
   local cn=cli.${FABRIC_ORG}
 
-  # prepare folder for chaincode testing
-  mkdir -p ${DATA_ROOT}/cli/chaincode
-  cp ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
-
   echo "
   ${cn}:
     container_name: ${cn}
@@ -252,7 +248,6 @@ services:"
   VOLUMES=()
 
   # print orderer services
-  getOrderers
   seq=${ORDERER_MIN:-"0"}
   max=${ORDERER_MAX:-"0"}
   until [ "${seq}" -ge "${max}" ]; do
@@ -270,10 +265,8 @@ volumes:"
   fi
 }
 
-# print docker yaml for a speicified peer org, e.g.,
-# printPeerDockerYaml org1
+# print docker yaml for the speicified peer org
 function printPeerDockerYaml {
-  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${1} ${ENV_TYPE}
   PEER_PORT=${PEER_PORT:-"7051"}
   COUCHDB_PORT=${COUCHDB_PORT:-"7056"}
   COUCHDB_USER=${COUCHDB_USER:-"admin"}
@@ -294,10 +287,6 @@ services:"
   VOLUMES=()
 
   # print peer services
-  getPeers
-  if [ "${STATE_DB}" == "couchdb" ]; then
-    getCouchdbs
-  fi
   seq=${PEER_MIN:-"0"}
   max=${PEER_MAX:-"0"}
   until [ "${seq}" -ge "${max}" ]; do
@@ -306,9 +295,7 @@ services:"
   done
 
   # print cli service for executing admin commands
-  if [ "${PEER_MAX:-0}" -gt 0 ]; then
-    printCliService
-  fi
+  printCliService
 
   # print named volumes
   if [ "${#VOLUMES[@]}" -gt "0" ]; then
@@ -439,23 +426,21 @@ function printOrdererStorageYaml {
   # PV and PVC for orderer config and data
   for ord in "${ORDERERS[@]}"; do
     printDataPV ${ord} "${ORG}-orderer-data-class"
-    if [ "${ORDERER_TYPE}" == "solo" ]; then
-      # create only the first orderer for solo consensus
-      break
-    fi
+    ${sumd} -p ${DATA_ROOT}/orderers/${ord}/data
+    ${sucp} ${DATA_ROOT}/tool/orderer-genesis.block ${DATA_ROOT}/orderers/${ord}/genesis.block
   done
 }
 
 # print PV and PVC for peer config and data
-# printPeerStorageYaml [start-seq end-seq]
+# printPeerStorageYaml [start-seq [end-seq] ]
 function printPeerStorageYaml {
+  # storage class for peer config and data folders
+  printStorageClass "${ORG}-peer-data-class"
+
   # default for all bootstrap peers
   local seq=${PEER_MIN:-"0"}
   local max=${PEER_MAX:-"0"}
-  if [ -z "${1}" ]; then
-    # storage class for orderer config and data folders
-    printStorageClass "${ORG}-peer-data-class"
-  else
+  if [ ! -z "${1}" ]; then
     seq=${1}
     if [ -z "${2}" ]; then
       max=$((${seq}+1))
@@ -467,6 +452,7 @@ function printPeerStorageYaml {
     local p=("peer-${seq}")
     seq=$((${seq}+1))
     printDataPV ${p} "${ORG}-peer-data-class"
+    ${sumd} -p ${DATA_ROOT}/peers/${p}/data
   done
 }
 
@@ -480,10 +466,6 @@ function printCliStorageYaml {
 
 function printOrdererYaml {
   local ord_cnt=${#ORDERERS[@]}
-  if [ "${ORDERER_TYPE}" == "solo" ]; then
-    # create only the first orderer for solo consensus
-    ord_cnt=1
-  fi
 
   echo "
 kind: Service
@@ -544,7 +526,7 @@ spec:
         - name: ORDERER_GENERAL_GENESISFILE
           value: /var/hyperledger/orderer/store/genesis.block
         - name: ORDERER_GENERAL_LOCALMSPID
-          value: ${ORDERER_MSP}
+          value: ${ORG_MSP}
         - name: ORDERER_GENERAL_LOCALMSPDIR
           value: /var/hyperledger/orderer/store/crypto/msp
         - name: ORDERER_GENERAL_TLS_ENABLED
@@ -580,6 +562,9 @@ spec:
 }
 
 function printPeerYaml {
+  COUCHDB_USER=${COUCHDB_USER:-"admin"}
+  COUCHDB_PASSWD=${COUCHDB_PASSWD:-"adminpw"}
+
   local p_cnt=${#PEERS[@]}
   local gossip_boot=""
   for p in "${PEERS[@]}"; do
@@ -627,7 +612,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: couchdb
-        image: hyperledger/fabric-couchdb
+        image: couchdb:3.1.1
         resources:
           requests:
             memory: ${POD_MEM}
@@ -704,14 +689,13 @@ spec:
          - containerPort: 7051
          - containerPort: 7053
         command:
-        - bash
+        - sh
         - -c
         - |
           CORE_PEER_ID=\$HOSTNAME.${FABRIC_ORG}
           CORE_PEER_ADDRESS=\$HOSTNAME.peer.${SVC_DOMAIN}:7051
           CORE_PEER_CHAINCODEADDRESS=\$HOSTNAME.peer.${SVC_DOMAIN}:7052
           CORE_PEER_GOSSIP_EXTERNALENDPOINT=\$HOSTNAME.peer.${SVC_DOMAIN}:7051
-          env
           peer node start
         volumeMounts:
         - mountPath: /host/var/run
@@ -739,13 +723,11 @@ spec:
 # e.g., printCliYaml peer-0
 function printCliYaml {
   local admin=${ADMIN_USER:-"Admin"}
-  local ord_ca="/etc/hyperledger/cli/store/crypto/orderer-0/msp/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
-  local ord_url="orderer-0.orderer.${SVC_DOMAIN}:7050"
-  if [ "${ORDERER_MAX:-0}" -eq 0 ] && [ ! -z "${ORDERER_ORG}" ]; then
-    local o_org=${ORDERER_ORG%%.*}
-    ord_ca="/etc/hyperledger/cli/store/crypto/orderer-0/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
-    ord_url="orderer-0.orderer.${SVC_DOMAIN/${ORG}./${o_org}.}:7050"
-  fi
+  local o_org=${ORDERER_ORG%%.*}
+  local ord_ca="/etc/hyperledger/cli/store/crypto/orderer-0/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
+  local ord_url="orderer-0.orderer.${SVC_DOMAIN/${ORG}./${o_org}.}:7050"
+  local ord_msp="${ORDERER_ORG%%.*}MSP"
+
   echo "
 apiVersion: v1
 kind: Pod
@@ -792,10 +774,10 @@ spec:
       value: /opt/gopath
     - name: ORDERER_CA
       value: ${ord_ca}
-    - name: ORDERER_TYPE
-      value: ${ORDERER_TYPE}
     - name: ORDERER_URL
       value: ${ord_url}
+    - name: ORDERER_MSP
+      value: ${ord_msp}
     - name: ORG
       value: ${ORG}
     - name: FABRIC_ORG
@@ -806,8 +788,6 @@ spec:
       value: ${TEST_CHANNEL}
     - name: SVC_DOMAIN
       value: ${SVC_DOMAIN}
-    - name: ORDERER_MSP
-      value: ${ORDERER_MSP}
     workingDir: /etc/hyperledger/cli/store
     volumeMounts:
     - mountPath: /host/var/run
@@ -920,28 +900,29 @@ function scaleOrderer {
   kubectl scale statefulsets orderer -n ${ORG} --replicas=${rep}
 }
 
-function configPersistentData {
-  for ord in "${ORDERERS[@]}"; do
-    ${sumd} -p ${DATA_ROOT}/orderers/${ord}/data
-    ${sucp} ${DATA_ROOT}/tool/${ORDERER_TYPE}-genesis.block ${DATA_ROOT}/orderers/${ord}/genesis.block
-  done
-
-  for p in "${PEERS[@]}"; do
-    ${sumd} -p ${DATA_ROOT}/peers/${p}/data
-  done
-}
-
 function startDockerNetwork {
   NETWORK=dovetail
   local docker_root=${DATA_ROOT}/network/docker
   mkdir -p ${docker_root}
+
+  getOrderers
   printOrdererDockerYaml > ${docker_root}/${ORDERER_ENV}-docker.yaml
   local containers="-f ${docker_root}/${ORDERER_ENV}-docker.yaml"
 
   for p in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${p} ${ENV_TYPE}
+    getPeers
+    if [ "${STATE_DB}" == "couchdb" ]; then
+      getCouchdbs
+    fi
+
     local dockerFile=${docker_root}/${p}-docker.yaml
-    printPeerDockerYaml $p > ${dockerFile}
+    printPeerDockerYaml > ${dockerFile}
     containers+=" -f ${dockerFile}"
+
+    # prepare folder for chaincode testing
+    mkdir -p ${DATA_ROOT}/cli/chaincode
+    cp ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
   done
   echo "docker-compose ${containers} up -d"
   docker-compose ${containers} up -d
@@ -967,64 +948,57 @@ function shutdownDockerNetwork {
 }
 
 function startK8sNetwork {
-  # prepare folder for chaincode testing
-  ${sumd} -p ${DATA_ROOT}/cli/chaincode
+  local k8s_root=${DATA_ROOT}/network/k8s
+  ${sumd} -p ${k8s_root}
 
-  ${sumd} -p ${DATA_ROOT}/network/k8s
   getOrderers
-  getPeers
-  configPersistentData
-  if [ "${ORDERER_MAX:-0}" -gt 0 ]; then
-    printOrdererStorageYaml | ${stee} ${DATA_ROOT}/network/k8s/orderer-pv.yaml > /dev/null
-    printOrdererYaml | ${stee} ${DATA_ROOT}/network/k8s/orderer.yaml > /dev/null
-  fi
-  if [ "${PEER_MAX:-0}" -gt 0 ]; then
-    printPeerStorageYaml | ${stee} ${DATA_ROOT}/network/k8s/peer-pv.yaml > /dev/null
-    printPeerYaml | ${stee} ${DATA_ROOT}/network/k8s/peer.yaml > /dev/null
-    printCliStorageYaml | ${stee} ${DATA_ROOT}/network/k8s/cli-pv.yaml > /dev/null
-    printCliYaml peer-0 | ${stee} ${DATA_ROOT}/network/k8s/cli.yaml > /dev/null
-  fi
+  printOrdererStorageYaml | ${stee} ${k8s_root}/${ORDERER_ENV}-pv.yaml > /dev/null
+  printOrdererYaml | ${stee} ${k8s_root}/${ORDERER_ENV}.yaml > /dev/null
 
-  # copy orderer cert for CLI if available
-  if [ "${ORDERER_MAX:-0}" -eq 0 ] && [ ! -z "${ORDERER_ORG}" ]; then
-    local ordcert=${DATA_ROOT}/../${ORDERER_ORG}/cli/crypto/orderer-0
-    if [ -d "${ordcert}" ]; then
-      echo "copy orderer TLS cert from ${ordcert}"
-      ${sucp} -R ${ordcert} ${DATA_ROOT}/cli/crypto
-    fi
-  fi
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    getPeers
+    printPeerStorageYaml | ${stee} ${k8s_root}/${po}-peer-pv.yaml > /dev/null
+    printPeerYaml | ${stee} ${k8s_root}/${po}-peer.yaml > /dev/null
+    printCliStorageYaml | ${stee} ${k8s_root}/${po}-cli-pv.yaml > /dev/null
+    printCliYaml peer-0 | ${stee} ${k8s_root}/${po}-cli.yaml > /dev/null
+
+    # prepare folder for chaincode testing
+    ${sumd} -p ${DATA_ROOT}/cli/chaincode
+    ${sucp} ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
+  done
 
   # start network
-  if [ "${ORDERER_MAX:-0}" -gt 0 ]; then
-    kubectl create -f ${DATA_ROOT}/network/k8s/orderer-pv.yaml
-    kubectl create -f ${DATA_ROOT}/network/k8s/orderer.yaml
-  fi
-  if [ "${PEER_MAX:-0}" -gt 0 ]; then
-    kubectl create -f ${DATA_ROOT}/network/k8s/peer-pv.yaml
-    kubectl create -f ${DATA_ROOT}/network/k8s/cli-pv.yaml
-    kubectl create -f ${DATA_ROOT}/network/k8s/peer.yaml
-    kubectl create -f ${DATA_ROOT}/network/k8s/cli.yaml
-  fi
+  kubectl create -f ${k8s_root}/${ORDERER_ENV}-pv.yaml
+  kubectl create -f ${k8s_root}/${ORDERER_ENV}.yaml
 
-  # copy network-util script to artifacts
-  if [ -f "${SCRIPT_DIR}/network-util.sh" ]; then
-    echo "copy network-util script ${SCRIPT_DIR}/network-util.sh"
-    ${sucp} ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
-  fi
+  for po in "${PEER_ENVS[@]}"; do
+    kubectl create -f ${k8s_root}/${po}-peer-pv.yaml
+    kubectl create -f ${k8s_root}/${po}-cli-pv.yaml
+    kubectl create -f ${k8s_root}/${po}-peer.yaml
+    kubectl create -f ${k8s_root}/${po}-cli.yaml
+  done
 }
 
 function shutdownK8sNetwork {
+  local k8s_root=${DATA_ROOT}/network/k8s
   echo "stop cli pod ..."
-  kubectl delete -f ${DATA_ROOT}/network/k8s/cli.yaml
-  kubectl delete -f ${DATA_ROOT}/network/k8s/cli-pv.yaml
-
-  echo "stop fabric network ..."
-  kubectl delete -f ${DATA_ROOT}/network/k8s/peer.yaml
-  for f in ${DATA_ROOT}/network/k8s/peer-pv*.yaml; do
-    kubectl delete -f ${f}
+  for po in "${PEER_ENVS[@]}"; do
+    kubectl delete -f ${k8s_root}/${po}-cli.yaml
+    kubectl delete -f ${k8s_root}/${po}-cli-pv.yaml
   done
-  kubectl delete -f ${DATA_ROOT}/network/k8s/orderer.yaml
-  for f in ${DATA_ROOT}/network/k8s/orderer-pv*.yaml; do
+
+  echo "stop peers ..."
+  for po in "${PEER_ENVS[@]}"; do
+    kubectl delete -f ${k8s_root}/${po}-peer.yaml
+    for f in ${k8s_root}/${po}-peer-pv*.yaml; do
+      kubectl delete -f ${f}
+    done
+  done
+
+  echo "stop orderers ..."
+  kubectl delete -f ${k8s_root}/${ORDERER_ENV}.yaml
+  for f in ${k8s_root}/${ORDERER_ENV}-pv*.yaml; do
     kubectl delete -f ${f}
   done
 
@@ -1035,8 +1009,11 @@ function shutdownK8sNetwork {
     done
 
     echo "clean up peer ledger files ..."
-    for d in "${DATA_ROOT}/peers/*/data"; do
-      ${surm} -R ${d}/*
+    for po in "${PEER_ENVS[@]}"; do
+      source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+      for d in "${DATA_ROOT}/peers/*/data"; do
+        ${surm} -R ${d}/*
+      done
     done
   fi
 }
