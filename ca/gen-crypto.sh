@@ -321,13 +321,6 @@ function initCrypto {
     mkdir -p ${DATA_ROOT}/tool/crypto
     cp -R ${DATA_ROOT}/crypto/msp ${DATA_ROOT}/tool/crypto
 
-    # initialize cli crypto if the org provides orderers
-    if [ "${ORDERER_MAX:-"0"}" -gt 0 ]; then
-      echo "copy cli crypto to ${DATA_ROOT}/cli/crypto/orderer-0/msp"
-      mkdir -p ${DATA_ROOT}/cli/crypto/orderer-0/msp
-      cp -R ${DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/cli/crypto/orderer-0/msp
-    fi
-
     # initialize gateway crypto
     echo "copy gateway crypto to ${DATA_ROOT}/gateway/${FABRIC_ORG}"
     mkdir -p ${DATA_ROOT}/gateway/${FABRIC_ORG}/ca/tls

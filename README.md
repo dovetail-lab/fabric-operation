@@ -25,14 +25,14 @@ To get-started for local development, you can set setup the environment as descr
 
 ## Start CA server and generate crypto data
 
-Following steps use `docker-desktop` Kubernetes on Mac to start `fabric-ca` PODs and generate crypto data required by the sample network operated by 3 organizations, [orderer](./config/orderer.env), [org1](./config/org1.env), and [org2](./config/org1.env).
+Following steps use `Docker Desktop` Kubernetes on Mac to start `fabric-ca` PODs and generate crypto data required by the sample network operated by 3 organizations, [orderer](./config/orderer.env), [org1](./config/org1.env), and [org2](./config/org1.env).
 
 ```bash
 cd ../ca
 ./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
-The will create crypto data required to support 3 orderers and 2 peers each for `org1` and `org2` as defined in the org's configuration files. You can edit the configuration files, e.g., [orderer.env](./config/orderer.env) if you want to use a different organization name, or run more orderer or peer nodes. The generated crypto data will be stored in the local folder `/path/to/dovetail-lab/fabric-operation/<org-name>`, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore when the above script is executed in the bastion host of a cloud provider.
+It will create crypto data required to support 3 orderers and 2 peers each for `org1` and `org2` as defined in the org's configuration files. You can edit the configuration files, e.g., [orderer.env](./config/orderer.env) if you want to use a different organization name, or run more orderer or peer nodes. The generated crypto data will be stored in the local folder `/path/to/dovetail-lab/fabric-operation/<org-name>`, or in a cloud file system, such as Amazon EFS, Azure Files, or GCP Filestore when the above script is executed on a bastion host of a cloud provider.
 
 ## Generate MSP definition and genesis block
 
@@ -40,12 +40,12 @@ The following script generates a genesis block for the sample network in Kuberne
 
 ```bash
 cd ../msp
-./bootstrap.sh -o orderer -p org1 -p org2 -d
+./bootstrap.sh -o orderer -p org1 -p org2
 ```
 
 ## Start the Fabric network
 
-The following script will start and test the sample fabric network by using the `docker-desktop` Kubernetes on a Mac:
+The following script will start and test a sample Fabric network by using the `Docker Desktop` Kubernetes on a Mac:
 
 ```bash
 cd ./network
@@ -58,23 +58,21 @@ Verify that all orderer and peer nodes are running by using `kubectl`, e.g.,
 kubectl get pod,svc --all-namespaces
 ```
 
-After the network startup, use `kubectl logs orderer-2 -n orderer` to check RAFT leader election result. When RAFT leader is elected, the log should show
+After the network started up, use `kubectl logs orderer-2 -n orderer` to check RAFT leader election result. When RAFT leader is elected, the log should show a log similar to the following:
 
 ```
 INFO 101 Raft leader changed: 0 -> 2 channel=netop1-channel node=2
 ```
 
-Note that the scripts use organization names, e.g, `org1`, as the Kubernetes namespace of corresponding processes, and so it can support multiple member organizations. If you want to reset the default namespace, you can use the following command:
-
-To revoke to the default namespace for `docker-desktop`, you can use the following command:
+Note that the script uses organization names, e.g, `org1`, as the Kubernetes namespace of corresponding processes, and so it can support multiple organizations. If you want to reset the default namespace `docker-desktop`, you can use the following command:
 
 ```bash
 kubectl config use-context docker-desktop
 ```
 
-## Smoke test by deploying sample chaincode `sacc`
+## Smoke test by using sample chaincode `sacc`
 
-The smoke test script [smoke-test.sh](./network/smoke-test.sh) creates the test channel `mychannel`, make 4 peer nodes join the channel, then package, deploy, and invoke the sample chaincode [sacc](https://github.com/hyperledger/fabric-samples/tree/master/chaincode/sacc).
+The smoke test script [smoke-test.sh](./network/smoke-test.sh) creates a test channel `mychannel`, makes 4 peer nodes to join the channel, then package, deploy, and invoke the sample chaincode [sacc](https://github.com/hyperledger/fabric-samples/tree/master/chaincode/sacc).
 
 ```bash
 cd ./network
@@ -83,20 +81,23 @@ cd ./network
 
 You should see that the chaincode invocation created a ledger record that sets `a = 100`, and the query afterwards returned the value `100`.
 
-If you used `docker-compose` for this excersize (as described below), you can look at the blockchain state via the `CouchDB` futon UI at `http://localhost:7056/_utils`, which is exposed for `docker-compose` only because it is not recommended to expose `CouchDB` in production configuration using Kubernetes.
+If you want to use `docker-compose` instead of Kubernetes, you can execute the same script with an extra flag `-t docker`. When `docker-compose` is used, you can also look at the blockchain states via the `CouchDB` futon UI at `http://localhost:7056/_utils`.
 
 ## Start gateway service and use REST APIs to test chaincode
 
-TODO: update required here ...
-
-Refer [gateway](./service/README.md) for more details on how to build and start a REST API service for applications to interact with one or more Fabric networks. The following commands will start a gateway service that exposes a Swagger-UI at `http://localhost:30081/swagger`.
+The gateway service implements a REST API that allows user to invoke any chaincode from a Swagger UI. Refer [gateway](./service/README.md) for more details. The following commands will start the gateway service that exposes a Swagger-UI at `http://localhost:30081/swagger`.
 
 ```bash
 cd ../service
-./gateway.sh start
+./gateway.sh config -o orderer -p org1 -p org2
+./gateway.sh start -p org1
 ```
 
-## Operations for managing the Fabric network
+## Deploy Dovetail applications
+
+The scripts are designed to support deploymment of Dovetail applications for Hyperledger Fabric. Refer [README](./dovetail/README.md) for details on build and deployment of Dovetail models for Fabric chaincode and client applications.
+
+## More operations for managing Fabric network
 
 TODO: update required here ...
 
@@ -114,26 +115,26 @@ Refer [operations](./operations.md) for description of these activities. More op
 
 ## Non-Mac users
 
-If you are not using a Mac, you can run these scripts using `docker-compose`, `Amazon EKS`, `Azure AKS`, or `Google GKE`. Simply add a corresponding `env_type` in all the commands, e.g.,
+If you are not using a Mac or Linux PC, you can run these scripts using `docker-compose`, or in one of the supported cloud platforms, i.e., [Amazon EKS](./aws), [Azure AKS](./aws), or [Google GKE](./gcp). Simply add a corresponding `-t` flag.
 
-- `./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d` to use `docker-composer`, or
-- execute the command on bastion host in cloud as described for Amazon WebService [aws](./aws), Microsoft Azue [az](./az), or Google Cloud [gcp](./gcp), or
-- try to verify if the scripts would work on [Minikube](https://kubernetes.io/docs/tasks/tools/install-minikube/).
-
-When `docker-compose` is used locally, the commands are as follows:
+For example, when `docker-compose` is used locally, the commands are as follows:
 
 ```bash
 cd ./ca
 ./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d
 
 cd ../msp
-./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d
+./bootstrap.sh -t docker -o orderer -p org1 -p org2
 
 cd ../network
 ./network.sh start -t docker -o orderer -p org1 -p org2
-
-docker ps -a
 ./smoke-test.sh docker
+
+cd ../service
+./gateway.sh config -t docker -o orderer -p org1 -p org2
+cp ./gateway-darwin ../org1.example.com/gateway
+cd ../org1.example.com/gateway
+CRYPTO_PATH=${PWD} ./gateway-darwin -network config_mychannel.yaml -matcher matchers.yaml -logtostderr -v 2
 ```
 
 ## TODO

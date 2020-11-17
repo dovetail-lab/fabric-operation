@@ -66,7 +66,7 @@ function printOrdererService {
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
       - ORDERER_GENERAL_GENESISMETHOD=file
-      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/genesis.block
       - ORDERER_GENERAL_LOCALMSPID=${ORG_MSP}
       - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
       # enabled TLS
@@ -80,7 +80,7 @@ function printOrdererService {
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: orderer
     volumes:
-        - ${DATA_ROOT}/tool/orderer-genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+        - ${DATA_ROOT}/tool/orderer-genesis.block:/var/hyperledger/orderer/genesis.block
         - ${DATA_ROOT}/orderers/${ord}/crypto/msp/:/var/hyperledger/orderer/msp
         - ${DATA_ROOT}/orderers/${ord}/crypto/tls/:/var/hyperledger/orderer/tls
         - ${ord}.${FABRIC_ORG}:/var/hyperledger/production/orderer
@@ -213,7 +213,7 @@ function printCliService {
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/cli/crypto/peer-0/tls/server.key
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/cli/crypto/peer-0/tls/ca.crt
       - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/cli/crypto/${admin}@${FABRIC_ORG}/msp
-      - ORDERER_CA=/etc/hyperledger/cli/crypto/orderer-0/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem
+      - ORDERER_CA=/etc/hyperledger/cli/crypto/${ORDERER_ORG}/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem
       - ORDERER_URL=orderer-0.${ORDERER_ORG}:7050
       - FABRIC_ORG=${FABRIC_ORG}
     working_dir: /etc/hyperledger/cli
@@ -724,7 +724,7 @@ spec:
 function printCliYaml {
   local admin=${ADMIN_USER:-"Admin"}
   local o_org=${ORDERER_ORG%%.*}
-  local ord_ca="/etc/hyperledger/cli/store/crypto/orderer-0/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
+  local ord_ca="/etc/hyperledger/cli/crypto/${ORDERER_ORG}/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
   local ord_url="orderer-0.orderer.${SVC_DOMAIN/${ORG}./${o_org}.}:7050"
   local ord_msp="${ORDERER_ORG%%.*}MSP"
 
@@ -757,15 +757,15 @@ spec:
     - name: CORE_PEER_LOCALMSPID
       value: ${ORG_MSP}
     - name: CORE_PEER_MSPCONFIGPATH
-      value: /etc/hyperledger/cli/store/crypto/${admin}@${FABRIC_ORG}/msp
+      value: /etc/hyperledger/cli/crypto/${admin}@${FABRIC_ORG}/msp
     - name: CORE_PEER_TLS_CERT_FILE
-      value: /etc/hyperledger/cli/store/crypto/${1}/tls/server.crt
+      value: /etc/hyperledger/cli/crypto/${1}/tls/server.crt
     - name: CORE_PEER_TLS_ENABLED
       value: \"true\"
     - name: CORE_PEER_TLS_KEY_FILE
-      value: /etc/hyperledger/cli/store/crypto/${1}/tls/server.key
+      value: /etc/hyperledger/cli/crypto/${1}/tls/server.key
     - name: CORE_PEER_TLS_ROOTCERT_FILE
-      value: /etc/hyperledger/cli/store/crypto/${1}/tls/ca.crt
+      value: /etc/hyperledger/cli/crypto/${1}/tls/ca.crt
     - name: CORE_VM_ENDPOINT
       value: unix:///host/var/run/docker.sock
     - name: FABRIC_LOGGING_SPEC
@@ -788,11 +788,11 @@ spec:
       value: ${TEST_CHANNEL}
     - name: SVC_DOMAIN
       value: ${SVC_DOMAIN}
-    workingDir: /etc/hyperledger/cli/store
+    workingDir: /etc/hyperledger
     volumeMounts:
     - mountPath: /host/var/run
       name: docker-sock
-    - mountPath: /etc/hyperledger/cli/store
+    - mountPath: /etc/hyperledger/cli
       name: data
   volumes:
   - name: docker-sock
@@ -943,8 +943,14 @@ function shutdownDockerNetwork {
   docker-compose ${containers} down --remove-orphans ${vols}
 
   # cleanup chaincode containers and images
-  docker rm $(docker ps -a | grep dev-peer | awk '{print $1}')
-  docker rmi $(docker images | grep dev-peer | awk '{print $3}')
+  local cc=$(docker ps -a --filter "label=org.hyperledger.fabric.chaincode.type" --format "{{.ID}}")
+  if [ ! -z "${cc}" ]; then 
+    docker rm ${cc}
+  fi
+  local cci=$(docker images --filter "reference=dev-peer*" --format "{{.ID}}")
+  if [ ! -z "${cci}" ]; then 
+    docker rmi -f ${cci}
+  fi
 }
 
 function startK8sNetwork {
@@ -1016,6 +1022,19 @@ function shutdownK8sNetwork {
       done
     done
   fi
+
+  # cleanup chaincode containers and images from local test
+  which docker
+  if [ $? -eq 0 ]; then
+    local cc=$(docker ps -a --filter "label=org.hyperledger.fabric.chaincode.type" --format "{{.ID}}")
+    if [ ! -z "${cc}" ]; then 
+      docker rm ${cc}
+    fi
+    local cci=$(docker images --filter "reference=dev-peer*" --format "{{.ID}}")
+    if [ ! -z "${cci}" ]; then 
+      docker rmi -f ${cci}
+    fi
+  fi
 }
 
 # execute command in cli container
@@ -1026,7 +1045,7 @@ function execUtil {
     docker exec -it cli.${FABRIC_ORG} bash -c "./${_cmd}"
   else
     echo "use k8s - ${_cmd}"
-    kubectl exec -it cli -n ${ORG} -- bash -c "./${_cmd}"
+    kubectl exec -it cli -n ${ORG} -- bash -c "cd cli && ./${_cmd}"
   fi
 }
 
@@ -1234,9 +1253,9 @@ function commitChaincode {
       cliRoot=${DATA_ROOT}/cli
       peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peer-0/tls/ca.crt"
     else
-      mkdir -p ${cliRoot}/crypto/${org}/tls
-      ${sucp} ${DATA_ROOT}/cli/crypto/peer-0/tls/ca.crt ${cliRoot}/crypto/${org}/tls
-      peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${org}/tls/ca.crt"
+      # mkdir -p ${cliRoot}/crypto/${org}/tls
+      # ${sucp} ${DATA_ROOT}/cli/crypto/peer-0/tls/ca.crt ${cliRoot}/crypto/${org}/tls
+      peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${FABRIC_ORG}/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
     fi
   done
   FABRIC_ORG=${firstOrg}
@@ -1297,10 +1316,7 @@ function invokeChaincode {
       cliRoot=${DATA_ROOT}/cli
       peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peer-0/tls/ca.crt"
     else
-      mkdir -p ${cliRoot}/crypto/${org}/tls
-      # TODO: handle this more generally, it is the same as ${DATA_ROOT}/crypto/msp/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem
-      ${sucp} ${DATA_ROOT}/cli/crypto/peer-0/tls/ca.crt ${cliRoot}/crypto/${org}/tls
-      peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${org}/tls/ca.crt"
+      peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${FABRIC_ORG}/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
     fi
   done
   FABRIC_ORG=${firstOrg}

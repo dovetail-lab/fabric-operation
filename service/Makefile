@@ -1,7 +1,8 @@
 MAKEFILE_THIS := $(lastword $(MAKEFILE_LIST))
 SRC_PATH      := $(patsubst %/,%,$(dir $(abspath $(MAKEFILE_THIS))))
-DEPLOY_PATH   := $(SRC_PATH)/../netop1.com/gateway
-FAB_PATH      ?= $(GOPATH)/src/github.com/hyperledger/fabric-samples
+DEPLOY_PATH   := $(SRC_PATH)/../org1.example.com/gateway
+LAB_PATH      ?= $(SRC_PATH)/../..
+FAB_PATH      ?= $(LAB_PATH)/hyperledger/fabric-samples
 
 .PHONY: all
 all: build
@@ -20,7 +21,7 @@ dist: gateway-linux
 
 .PHONY: run
 run:
-	CRYPTO_PATH=$(FAB_PATH)/first-network/crypto-config ./gateway-darwin -logtostderr -v 2
+	CRYPTO_PATH=$(FAB_PATH)/test-network/organizations ./gateway-darwin -logtostderr -v 2
 
 .PHONY: codegen
 codegen:

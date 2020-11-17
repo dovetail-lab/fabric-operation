@@ -5,10 +5,10 @@
 # in the license file that is distributed with this file.
 
 # start or shutdown and config client gateway service
-# usage: gateway.sh <cmd> [-p <property file>] [-t <env type>] [-c channel>] [-u <user>]
+# usage: gateway.sh <cmd> -o <orderer-org> -p <peer-org> [-t <env type>] [-c channel>] [-u <user>]
 # it uses a property file of the specified org as defined in ../config/org.env, e.g.
-#   gateway.sh start -p netop1
-# would use config parameters specified in ../config/netop1.env
+#   gateway.sh start -o orderer -p org1
+# would use config parameters specified in ../config/orderer.env and ../config/org1.env
 # the env_type can be k8s or aws/az/gcp to use local host or a cloud file system, i.e. efs/azf/gfs, default k8s for local persistence
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")"; echo "$(pwd)")"
@@ -49,12 +49,6 @@ function getHostUrl {
 
 # printNetworkYaml <channel>
 function printNetworkYaml {
-  getOrderers
-  getPeers
-  local caHost="ca-server.${FABRIC_ORG}"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    caHost="ca-server.${SVC_DOMAIN}"
-  fi
   echo "
 name: ${1}
 version: 1.0.0
@@ -69,27 +63,37 @@ client:
 channels:
   ${1}:
     peers:"
-  for p in "${PEERS[@]}"; do
-    echo "
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    getPeers
+    for p in "${PEERS[@]}"; do
+      echo "
       ${p}.${FABRIC_ORG}:
         endorsingPeer: true
         chaincodeQuery: true
         ledgerQuery: true
         eventSource: true"
+    done
   done
   echo "
-organizations:
-  ${ORG}:
+organizations:"
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    getPeers
+    echo "  ${ORG}:
     mspid: ${ORG_MSP}
     cryptoPath:  ${FABRIC_ORG}/users/{username}@${FABRIC_ORG}/msp
     peers:"
-  for p in "${PEERS[@]}"; do
-    echo "      - ${p}.${FABRIC_ORG}"
+    for p in "${PEERS[@]}"; do
+      echo "      - ${p}.${FABRIC_ORG}"
+    done
+    echo "    certificateAuthorities:
+      - ca.${FABRIC_ORG}"
   done
-  echo "    certificateAuthorities:
-      - ca.${FABRIC_ORG}
-
+  echo "
 orderers:"
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+  getOrderers
   for ord in "${ORDERERS[@]}"; do
     echo "
   ${ord}.${FABRIC_ORG}:
@@ -99,66 +103,68 @@ orderers:"
   done
   echo "
 peers:"
-  for p in "${PEERS[@]}"; do
-    echo "
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    getPeers
+    for p in "${PEERS[@]}"; do
+      echo "
   ${p}.${FABRIC_ORG}:
     url: $(getHostUrl ${p}):7051
     tlsCACerts:
       path: \${CRYPTO_PATH}/${FABRIC_ORG}/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
+    done
   done
   echo "
-certificateAuthorities:
-  ca.${FABRIC_ORG}:
+certificateAuthorities:"
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    local caHost="ca.${FABRIC_ORG}"
+    if [ ! -z "${SVC_DOMAIN}" ]; then
+      caHost="ca-server.${SVC_DOMAIN}"
+    fi
+    echo "  ca.${FABRIC_ORG}:
     url: https://${caHost}:7054
     tlsCACerts:
       path: \${CRYPTO_PATH}/${FABRIC_ORG}/ca/tls/server.crt
     registrar:
       enrollId: ${CA_ADMIN:-"caadmin"}
       enrollSecret: ${CA_PASSWD:-"caadminpw"}
-    caName: ca.${FABRIC_ORG}"
+    caName: ca.${FABRIC_ORG}
+"
+  done
 }
 
 function printLocalMatcherYaml {
-  ORDERER_PORT=${ORDERER_PORT:-"7050"}
-  PEER_PORT=${PEER_PORT:-"7051"}
-
   echo "entityMatchers:
   peer:"
 
-  # peer name matchers
-  local seq=${PEER_MIN:-"0"}
-  local max=${PEER_MAX:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    local p="peer-${seq}"
-    local port=$((${seq} * 10 + ${PEER_PORT}))
-    seq=$((${seq}+1))
-    echo "
-    - pattern: ${p}.${ORG}.(\w+)
-      urlSubstitutionExp: localhost:${port}
-      sslTargetOverrideUrlSubstitutionExp: ${p}.${FABRIC_ORG}
-      mappedHost: ${p}.${FABRIC_ORG}"
-  done
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    PEER_PORT=${PEER_PORT:-"7051"}
 
-  # peer port matchers
-  seq=${PEER_MIN:-"0"}
-  max=${PEER_MAX:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    local p="peer-${seq}"
-    local port=$((${seq} * 10 + ${PEER_PORT}))
-    seq=$((${seq}+1))
-    echo "
-    - pattern: (\w+):${port}
+    # peer name matchers
+    local seq=${PEER_MIN:-"0"}
+    local max=${PEER_MAX:-"0"}
+    until [ "${seq}" -ge "${max}" ]; do
+      local p="peer-${seq}"
+      local port=$((${seq} * 10 + ${PEER_PORT}))
+      seq=$((${seq}+1))
+      echo "
+    - pattern: ${p}.${FABRIC_ORG}
+      urlSubstitutionExp: localhost:${port}
+      sslTargetOverrideUrlSubstitutionExp: ${p}.${FABRIC_ORG}
+      mappedHost: ${p}.${FABRIC_ORG}
+
+    - pattern: ${p}.${FABRIC_ORG}:7051
       urlSubstitutionExp: localhost:${port}
       sslTargetOverrideUrlSubstitutionExp: ${p}.${FABRIC_ORG}
       mappedHost: ${p}.${FABRIC_ORG}"
+    done
   done
   echo "
-    - pattern: (\w+).${ORG}.(\w+):(\d+)
-      urlSubstitutionExp: localhost:\${3}
-      sslTargetOverrideUrlSubstitutionExp: \${1}.${FABRIC_ORG}
-      mappedHost: \${1}.${FABRIC_ORG}
-
   orderer:"
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+  ORDERER_PORT=${ORDERER_PORT:-"7050"}
 
   # orderer name matchers
   seq=${ORDERER_MIN:-"0"}
@@ -168,37 +174,34 @@ function printLocalMatcherYaml {
     local port=$((${seq} * 10 + ${ORDERER_PORT}))
     seq=$((${seq}+1))
     echo "
-    - pattern: ${ord}.${ORG}.(\w+)
+    - pattern: ${ord}.${FABRIC_ORG}
       urlSubstitutionExp: localhost:${port}
       sslTargetOverrideUrlSubstitutionExp: ${ord}.${FABRIC_ORG}
-      mappedHost: ${ord}.${FABRIC_ORG}"
-  done
+      mappedHost: ${ord}.${FABRIC_ORG}
 
-  # orderer port matchers
-  seq=${ORDERER_MIN:-"0"}
-  max=${ORDERER_MAX:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    local ord="orderer-${seq}"
-    local port=$((${seq} * 10 + ${ORDERER_PORT}))
-    seq=$((${seq}+1))
-    echo "
-    - pattern: (\w+):${port}
+    - pattern: ${ord}.${FABRIC_ORG}:7050
       urlSubstitutionExp: localhost:${port}
       sslTargetOverrideUrlSubstitutionExp: ${ord}.${FABRIC_ORG}
       mappedHost: ${ord}.${FABRIC_ORG}"
   done
 
   echo "
-    - pattern: (\w+).${ORG}.(\w+):(\d+)
-      urlSubstitutionExp: localhost:\${3}
-      sslTargetOverrideUrlSubstitutionExp: \${1}.${FABRIC_ORG}
-      mappedHost: \${1}.${FABRIC_ORG}
+  certificateAuthority:"
 
-  certificateAuthority:
-    - pattern: (\w+).${ORG}.(\w+)
-      urlSubstitutionExp: https://localhost:7054
-      sslTargetOverrideUrlSubstitutionExp: ca-server.${FABRIC_ORG}
-      mappedHost: ca-server.${FABRIC_ORG}"
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    caPort=${CA_PORT:-7054}
+    echo "
+    - pattern: ca.${FABRIC_ORG}
+      urlSubstitutionExp: https://localhost:${caPort}
+      sslTargetOverrideUrlSubstitutionExp: ca.${FABRIC_ORG}
+      mappedHost: ca.${FABRIC_ORG}
+
+    - pattern: ca.${FABRIC_ORG}:7054
+      urlSubstitutionExp: https://localhost:${caPort}
+      sslTargetOverrideUrlSubstitutionExp: ca.${FABRIC_ORG}
+      mappedHost: ca.${FABRIC_ORG}"
+  done
 }
 
 ##############################################################################
@@ -423,25 +426,58 @@ spec:
 # Gateway operations
 ##############################################################################
 
-function createArtifacts {
+function createNetworkArtifacts {
+  local configPath=${DATA_ROOT}/gateway/config
+  ${sumd} -p ${configPath}
   if [ "${ENV_TYPE}" == "docker" ]; then
     echo "create network config for local host"
-    printNetworkYaml ${CHANNEL_ID} > ${SCRIPT_DIR}/config/config_${CHANNEL_ID}.yaml
-    printLocalMatcherYaml > ${SCRIPT_DIR}/config/matchers.yaml
+    printNetworkYaml ${CHANNEL_ID} > ${configPath}/config_${CHANNEL_ID}.yaml
+    printLocalMatcherYaml > ${configPath}/matchers.yaml
   else
     echo "create network config"
-    ${sumd} -p ${DATA_ROOT}/gateway/config
-    printNetworkYaml ${CHANNEL_ID} | ${stee} ${DATA_ROOT}/gateway/config/config_${CHANNEL_ID}.yaml > /dev/null
-
-    echo "create k8s yaml files"
-    ${sumd} -p ${DATA_ROOT}/gateway/k8s
-    printStorageYaml | ${stee} ${DATA_ROOT}/gateway/k8s/gateway-pv.yaml > /dev/null
-    printGatewayYaml ${CHANNEL_ID} ${USER_ID} | ${stee} ${DATA_ROOT}/gateway/k8s/gateway.yaml > /dev/null
+    printNetworkYaml ${CHANNEL_ID} | ${stee} ${configPath}/config_${CHANNEL_ID}.yaml > /dev/null
+    if [ -f ${configPath}/matchers.yaml ]; then
+      ${surm} ${configPath}/matchers.yaml
+    fi
   fi
 }
 
+function createK8sGatewayYaml {
+  echo "create k8s yaml files"
+  ${sumd} -p ${DATA_ROOT}/gateway/k8s
+  printStorageYaml | ${stee} ${DATA_ROOT}/gateway/k8s/gateway-pv.yaml > /dev/null
+  printGatewayYaml ${CHANNEL_ID} ${USER_ID} | ${stee} ${DATA_ROOT}/gateway/k8s/gateway.yaml > /dev/null
+}
+
+# copy Admin user crypto data to first peer org's gateway for testing purpose
+function copyAdminUser {
+  local gatewayRoot=""
+  for org in ${PEER_ENVS[@]}; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${org} ${ENV_TYPE}
+    if [ -z "${gatewayRoot}" ]; then
+      # set target gateway data root
+      gatewayRoot=${DATA_ROOT}/gateway
+    else
+      local adminCrypto=${gatewayRoot}/${FABRIC_ORG}/users/${USER_ID}\@${FABRIC_ORG}
+      if [ -d "${adminCrypto}" ]; then
+        ${surm} -R ${adminCrypto}
+      fi
+      ${sumd} -p ${gatewayRoot}/${FABRIC_ORG}/users
+      echo "check ${DATA_ROOT}/crypto/users/${USER_ID}@${FABRIC_ORG}"
+      if [ -d "${DATA_ROOT}/crypto/users/${USER_ID}@${FABRIC_ORG}" ]; then
+        echo "copy admin user to ${adminCrypto}"
+        ${sucp} -R ${DATA_ROOT}/crypto/users/${USER_ID}\@${FABRIC_ORG} ${gatewayRoot}/${FABRIC_ORG}/users
+      fi
+    fi
+  done
+}
+
 function startGateway {
-  createArtifacts
+  if [ ! -f ${DATA_ROOT}/gateway/config/config_${CHANNEL_ID}.yaml ]; then
+    echo "Cannot find network config ${DATA_ROOT}/gateway/config/config_${CHANNEL_ID}.yaml"
+    echo "Generate the network config using './gateway.sh config ..."
+    exit 1
+  fi
 
   if [ "${ENV_TYPE}" == "docker" ]; then
     if [ -f ${SCRIPT_DIR}/gateway-darwin ]; then
@@ -453,6 +489,7 @@ function startGateway {
       return 1
     fi
   else
+    createK8sGatewayYaml
     if [ ! -f ${DATA_ROOT}/gateway/gateway ]; then
       if [ -f ${SCRIPT_DIR}/gateway-linux ]; then
         echo "copy gateway artifacts to ${DATA_ROOT}/gateway"
@@ -507,28 +544,38 @@ function printHelp() {
   echo "Usage: "
   echo "  gateway.sh <cmd> [-p <property file>] [-t <env type>] [-c channel>] [-u <user>]"
   echo "    <cmd> - one of the following commands:"
-  echo "      - 'start' - start gateway service, arguments: [-p <prop-file>] [-t <env-type>] [-c channel>] [-u <user>]"
-  echo "      - 'shutdown' - shutdown gateway service, arguments: [-p <prop-file>] [-t <env-type>]"
-  echo "      - 'config' - create gateway artifacts, arguments: [-p <prop-file>] [-t <env-type>] [-c channel>] [-u <user>]"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "      - 'start' - start gateway service, arguments: -p <peer-org> [-t <env-type>] [-c channel>] [-u <user>]"
+  echo "      - 'shutdown' - shutdown gateway service, arguments: [-p <peer-org>] [-t <env-type>]"
+  echo "      - 'config' - create gateway artifacts, arguments: -o <orderer-org> -p <peer-org> [-t <env-type>] [-c channel>] [-u <user>]"
+  echo "    -o <orderer-org> - the .env file in config folder that defines orderer org properties, e.g., orderer (default)"
+  echo "    -p <peer-org> - the .env file in config folder that defines peer org properties, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -c <channel> - default channel ID that the gateway will connect to, default 'mychannel'"
   echo "    -u <user> - default user that the gateway will use to connect to fabric network, default 'Admin'"
   echo "  gateway.sh -h (print this message)"
+  echo "  Example:"
+  echo "    ./gateway.sh config -o orderer -p org1 -p org2"
+  echo "    ./gateway.sh start -p org1"
+  echo "    ./gateway.sh shutdown -p org1"
 }
 
-ORG_ENV="netop1"
+PEER_ENVS=()
 
 CMD=${1}
-shift
-while getopts "h?p:t:c:u:" opt; do
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
+while getopts "h?o:p:t:c:u:" opt; do
   case "$opt" in
   h | \?)
     printHelp
     exit 0
     ;;
+  o)
+    ORDERER_ENV=$OPTARG
+    ;;
   p)
-    ORG_ENV=$OPTARG
+    PEER_ENVS+=($OPTARG)
     ;;
   t)
     ENV_TYPE=$OPTARG
@@ -542,26 +589,42 @@ while getopts "h?p:t:c:u:" opt; do
   esac
 done
 
-source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORG_ENV} ${ENV_TYPE}
-if [ "${USER_ID}" == "" ]; then
+if [ ${#PEER_ENVS[@]} -gt 0 ]; then
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${PEER_ENVS[0]} ${ENV_TYPE}
+else
+  echo "Must specify at least one peer org"
+  printHelp
+  exit 1
+fi
+if [ -z "${USER_ID}" ]; then
   USER_ID=${ADMIN_USER:-"Admin"}
 fi
-if [ "${CHANNEL_ID}" == "" ]; then
+if [ -z "${CHANNEL_ID}" ]; then
   CHANNEL_ID=${TEST_CHANNEL:-"mychannel"}
 fi
+POD_CPU=${POD_CPU:-"500m"}
+POD_MEM=${POD_MEM:-"1Gi"}
 
 case "${CMD}" in
 start)
-  echo "start gateway service: ${ORG_ENV} ${ENV_TYPE}"
+  echo "start gateway service: ${PEER_ENVS[@]} ${ENV_TYPE} ${CHANNEL_ID} ${USER_ID}"
   startGateway
   ;;
 shutdown)
-  echo "shutdown gateway service: ${ORG_ENV} ${ENV_TYPE} ${CHANNEL_ID} ${USER_ID}"
+  echo "shutdown gateway service: ${PEER_ENVS[@]} ${ENV_TYPE}"
   shutdownGateway
   ;;
 config)
-  echo "config gateway service: ${ORG_ENV} ${ENV_TYPE} ${CHANNEL_ID} ${USER_ID}"
-  createArtifacts
+  if [ -z "${ORDERER_ENV}" ]; then
+    echo "orderer org must be specified"
+    printHelp
+    exit 1
+  fi
+  echo "config gateway service: ${ORDERER_ENV} ${PEER_ENVS[@]} ${ENV_TYPE} ${CHANNEL_ID}"
+  createNetworkArtifacts
+  if [ ${#PEER_ENVS[@]} -gt 1 ]; then
+    copyAdminUser
+  fi
   ;;
 *)
   printHelp

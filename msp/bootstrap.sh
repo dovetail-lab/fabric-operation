@@ -45,7 +45,7 @@ function printHelp() {
   echo "Generate artifacts for orderer genesis and channel creation transactions"
   echo "Usage: "
   echo "  bootstrap.sh -o <orderer-org> [-p <peer-org>] [-t <env type>] [-d]"
-  echo "    -o <orderer-org> - the .env file in config folder that defines properties of the orderer org, e.g., orderer (default)"
+  echo "    -o <orderer-org> - the .env file in config folder that defines properties of the orderer org, e.g., orderer"
   echo "    -p <peer-org> - the .env file in config folder that defines properties of a peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -d - shutdown and delete all ca/tlsca server data after bootstrap"
@@ -54,8 +54,7 @@ function printHelp() {
   echo "    ./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d"
 }
 
-ORDERER_ORG="orderer"
-PEER_ORGS=()
+PEER_ENVS=()
 
 while getopts "h?o:p:t:d" opt; do
   case "$opt" in
@@ -64,10 +63,10 @@ while getopts "h?o:p:t:d" opt; do
     exit 0
     ;;
   o)
-    ORDERER_ORG=$OPTARG
+    ORDERER_ENV=$OPTARG
     ;;
   p)
-    PEER_ORGS+=($OPTARG)
+    PEER_ENVS+=($OPTARG)
     ;;
   t)
     ENV_TYPE=$OPTARG
@@ -78,22 +77,28 @@ while getopts "h?o:p:t:d" opt; do
   esac
 done
 
-source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
+if [ -z ${ORDERER_ENV} ] || [ ${#PEER_ENVS[@]} -eq 0 ]; then
+  echo "Must specify orderer org and at least a peer org"
+  printHelp
+  exit 1
+fi
+
+source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
 peers=""
-for p in "${PEER_ORGS[@]}"; do 
+for p in "${PEER_ENVS[@]}"; do 
   peers="$peers -p $p"
 done
 echo "specified peers args: $peers"
-echo "start tool container for $ORDERER_ORG"
-./msp-util.sh start -t ${ENV_TYPE} -o $ORDERER_ORG $peers
+echo "start tool container for $ORDERER_ENV"
+./msp-util.sh start -t ${ENV_TYPE} -o $ORDERER_ENV $peers
 waitForTool
 
-echo "bootstrap genesis and channels for $ORDERER_ORG"
-./msp-util.sh bootstrap -t ${ENV_TYPE} -o $ORDERER_ORG $peers
+echo "bootstrap genesis and channels for $ORDERER_ENV"
+./msp-util.sh bootstrap -t ${ENV_TYPE} -o $ORDERER_ENV $peers
 
 if [ ! -z "${CLEANUP}" ]; then
-  echo "shutdown tool container for $ORDERER_ORG"
-  ./msp-util.sh shutdown -t "${ENV_TYPE}" -o ${ORDERER_ORG}
+  echo "shutdown tool container for $ORDERER_ENV"
+  ./msp-util.sh shutdown -t "${ENV_TYPE}" -o ${ORDERER_ENV}
 fi
 
 echo "artifacts are generated in ${DATA_ROOT}/tool"

@@ -217,7 +217,7 @@ spec:
     spec:
       containers:
       - name: ca-client
-        image: hyperledger/fabric-ca:${FAB_VERSION}
+        image: hyperledger/fabric-ca:${CA_VERSION}
         resources:
           requests:
             memory: ${POD_MEM}

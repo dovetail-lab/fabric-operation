@@ -36,7 +36,7 @@ function getOrderers {
 }
 
 function printOrdererMSP {
-  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
 
   echo "
     - &${ORG_MSP}
@@ -69,7 +69,7 @@ function printPeerMSP {
     - &${ORG_MSP}
         Name: ${ORG_MSP}
         ID: ${ORG_MSP}
-        MSPDir: /etc/hyperledger/tool/crypto/${ORG}
+        MSPDir: /etc/hyperledger/tool/crypto/${FABRIC_ORG}
         Policies:
             Readers:
                 Type: Signature
@@ -217,7 +217,7 @@ function printConfigTx {
 
   echo "---
 Organizations:"
-  for p in "${PEER_ORGS[@]}"; do
+  for p in "${PEER_ENVS[@]}"; do
     printPeerMSP $p
   done
   printOrdererMSP
@@ -412,7 +412,7 @@ spec:
     - /bin/bash
     - -c
     - while true; do sleep 30; done
-    workingDir: /etc/hyperledger/tool
+    workingDir: /etc/hyperledger
     volumeMounts:
     - mountPath: /host/var/run
       name: docker-sock
@@ -429,10 +429,6 @@ spec:
 }
 
 function startService {
-  # print out configtx.yaml
-  echo "create ${DATA_ROOT}/tool/configtx.yaml"
-  printConfigTx | ${stee} ${DATA_ROOT}/tool/configtx.yaml > /dev/null
-
   if [ "${ENV_TYPE}" == "docker" ]; then
     echo "use docker-compose"
     # start tool container to generate genesis block and channel tx
@@ -498,7 +494,7 @@ function execCommand {
   if [ "${ENV_TYPE}" == "docker" ]; then
     docker exec -it tool.${FABRIC_ORG} bash -c "./${_cmd}"
   else
-    kubectl exec -it tool -n ${ORG} -- bash -c "./${_cmd}"
+    kubectl exec -it tool -n ${ORG} -- bash -c "cd tool && ./${_cmd}"
   fi
 }
 
@@ -531,16 +527,16 @@ function buildFlogoChaincode {
 
   local cmd="fabric-cli/scripts/build-cds.sh ${_model} ${name} ${VERSION}"
   if [ "${ENV_TYPE}" == "docker" ]; then
-    docker exec -it tool.${FABRIC_ORG} bash -c "./${cmd}"
+    docker exec -it tool.${FABRIC_ORG} bash -c "/root/${cmd}"
   else
     kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
   fi
   ${sumv} ${DATA_ROOT}/tool/${name}/${name}_${VERSION}.tar.gz ${DATA_ROOT}/tool
 
-  # copy to peer-org's cli for installation if PEER_ORGS are specified
+  # copy to peer-org's cli for installation if PEER_ENVS are specified
   local pack=${DATA_ROOT}/tool/${name}_${VERSION}.tar.gz
   echo "chaincode package is built in folder ${pack}"
-  for po in "${PEER_ORGS[@]}"; do
+  for po in "${PEER_ENVS[@]}"; do
     source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
     echo "copy chaincode package to ${DATA_ROOT}/cli"
     ${sucp} ${pack} ${DATA_ROOT}/cli
@@ -557,6 +553,10 @@ function buildFlogoApp {
   local _model=${MODEL##*/}
   local name=${_model%.*}
   name=${name//_/-}
+  local _goos=${GO_OS}
+  if [ -z "${GO_OS}" ]; then
+    _goos="linux"
+  fi
 
   if [ -f "${DATA_ROOT}/tool/${name}/${_model}" ]; then
     echo "cleanup old model in ${DATA_ROOT}/tool/${name}"
@@ -566,49 +566,48 @@ function buildFlogoApp {
   ${sumd} -p ${DATA_ROOT}/tool/${name}
   ${sucp} ${MODEL} ${DATA_ROOT}/tool/${name}
 
-  cmd="fabric-cli/scripts/build-client.sh ${_model} ${name} linux amd64"
+  cmd="fabric-cli/scripts/build-client.sh ${_model} ${name} ${_goos} amd64"
   if [ "${ENV_TYPE}" == "docker" ]; then
-    docker exec -it tool.${FABRIC_ORG} bash -c "./${cmd}"
+    docker exec -it tool.${FABRIC_ORG} bash -c "/root/${cmd}"
   else
     kubectl exec -it tool -n ${ORG} -- bash -c "/root/${cmd}"
   fi
 
-  ${sumv} ${DATA_ROOT}/tool/${name}/${name}_linux_amd64 ${DATA_ROOT}/tool
+  ${sumv} ${DATA_ROOT}/tool/${name}/${name}_${_goos}_amd64 ${DATA_ROOT}/tool
   echo "app executable is built in folder ${DATA_ROOT}/tool"
 }
 
 # Print the usage message
 function printHelp() {
   echo "Usage: "
-  echo "  msp-util.sh <cmd> [-o <orderer-org>] [-p <peer-org>] [-t <env type>] [-a <consensus algorithm>] [-c <channel name>]"
+  echo "  msp-util.sh <cmd> [-o <orderer-org>] [-p <peer-org>] [-t <env type>] [-c <channel name>]"
   echo "    <cmd> - one of the following commands"
   echo "      - 'start' - start tools container to run msp-util"
   echo "      - 'shutdown' - shutdown tools container for the msp-util"
   echo "      - 'bootstrap' - generate bootstrap genesis block and test channel tx defined in network spec"
-  echo "      - 'genesis' - generate genesis block of specified consensus type, with argument '-a <consensus algorithm>'"
+  echo "      - 'genesis' - generate genesis block of etcd raft consensus"
   echo "      - 'channel' - generate channel creation tx for specified channel name, with argument '-c <channel name>'"
   echo "      - 'mspconfig' - print MSP config json for adding to a network, output in '${DATA_ROOT}/tool'"
   echo "      - 'orderer-config' - print orderer RAFT consenter config for adding to a network, with arguments -s <start-seq> [-e <end-seq>]"
   echo "      - 'build-cds' - build chaincode cds package from flogo model, with arguments -m <model-json> [-v <version>]"
-  echo "      - 'build-app' - build linux executable from flogo model, with arguments -m <model-json>"
+  echo "      - 'build-app' - build linux executable from flogo model, with arguments -m <model-json> -g <go-os>"
   echo "    -o <orderer-org> - the .env file in config folder that defines the orderer org, e.g., orderer (default)"
   echo "    -p <peer-org> - the .env file in config folder that defines a peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
-  echo "    -a <consensus algorithm> - 'solo' or 'etcdraft' used with the 'genesis' command"
   echo "    -c <channel name> - name of a channel, used with the 'channel' command"
   echo "    -s <start seq> - start sequence number (inclusive) for orderer config"
   echo "    -e <end seq> - end sequence number (exclusive) for orderer config"
   echo "    -m <model json> - Flogo model json file"
+  echo "    -g <go-os> - target os, e.g., linux (default) or darwin"
   echo "    -v <cc version> - version of chaincode"
   echo "  msp-util.sh -h (print this message)"
   echo "  Example:"
-  echo "    ./msp-util.sh start -t docker -o orderer -p org1 -p org2"
+  echo "    ./msp-util.sh start -t docker -o orderer"
   echo "    ./msp-util.sh bootstrap -t docker -o orderer -p org1 -p org2"
+  echo "    ./msp-util.sh shutdown -t docker -o orderer"
 }
 
-# default orderer org name
-ORDERER_ORG="orderer"
-PEER_ORGS=()
+PEER_ENVS=()
 # default chaincode version
 VERSION=1.0
 
@@ -616,23 +615,20 @@ CMD=${1}
 if [ "${CMD}" != "-h" ]; then
   shift
 fi
-while getopts "h?o:p:t:a:c:s:e:m:v:" opt; do
+while getopts "h?o:p:t:c:s:e:m:g:v:" opt; do
   case "$opt" in
   h | \?)
     printHelp
     exit 0
     ;;
   o)
-    ORDERER_ORG=$OPTARG
+    ORDERER_ENV=$OPTARG
     ;;
   p)
-    PEER_ORGS+=($OPTARG)
+    PEER_ENVS+=($OPTARG)
     ;;
   t)
     ENV_TYPE=$OPTARG
-    ;;
-  a)
-    CONS_TYPE=$OPTARG
     ;;
   c)
     CHAN_NAME=$OPTARG
@@ -646,44 +642,49 @@ while getopts "h?o:p:t:a:c:s:e:m:v:" opt; do
   m)
     MODEL=$OPTARG
     ;;
+  g)
+    GO_OS=$OPTARG
+    ;;
   v)
     VERSION=$OPTARG
     ;;
   esac
 done
 
-source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
+if [ ! -z "${ORDERER_ENV}" ]; then
+  echo "set env to ${ORDERER_ENV}"
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+elif [ ${#PEER_ENVS[@]} -gt 0 ]; then
+  echo "set env to ${PEER_ENVS[0]}"
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${PEER_ENVS[0]} ${ENV_TYPE}
+fi
 
 case "${CMD}" in
 start)
-  echo "start msp util tool: ${ORDERER_ORG} ${ENV_TYPE}"
+  echo "start msp util tool: ${ORDERER_ENV} ${PEER_ENVS[@]} ${ENV_TYPE}"
   startService
   ;;
 shutdown)
-  echo "shutdown msp util tool: ${ORDERER_ORG} ${ENV_TYPE}"
+  echo "shutdown msp util tool: ${ORDERER_ENV} ${PEER_ENVS[@]} ${ENV_TYPE}"
   shutdownService
   ;;
 bootstrap)
-  echo "bootstrap msp artifacts: ${PEER_ORGS[@]} ${ENV_TYPE}"
-  for p in "${PEER_ORGS[@]}"; do
+  echo "bootstrap msp artifacts: ${ORDERER_ENV} ${PEER_ENVS[@]} ${ENV_TYPE}"
+  if [ -z ${ORDERER_ENV} ]; then
+    echo "orderer org must be specified"
+    printHelp
+    exit 1
+  fi
+
+  for p in "${PEER_ENVS[@]}"; do
     source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${p} ${ENV_TYPE}
     PEER_MSPS+=(${ORG_MSP})
   done
-  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ORG} ${ENV_TYPE}
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+  echo "create ${DATA_ROOT}/tool/configtx.yaml"
+  printConfigTx | ${stee} ${DATA_ROOT}/tool/configtx.yaml > /dev/null
+
   execCommand "bootstrap ${PEER_MSPS[@]}"
-  ;;
-mspconfig)
-  echo "print peer MSP config json file: ${ORDERER_ORG} ${ENV_TYPE}"
-  execCommand "mspconfig"
-  ;;
-genesis)
-  echo "create genesis block for consensus type: [ ${CONS_TYPE} ]"
-  if [ -z "${CONS_TYPE}" ]; then
-    echo "Error: consensus type not specified"
-    printHelp
-  else
-    execCommand "genesis ${CONS_TYPE}"
-  fi
   ;;
 channel)
   echo "create channel tx for channel: [ ${CHAN_NAME} ]"
@@ -693,6 +694,14 @@ channel)
   else
     execCommand "channel ${CHAN_NAME}"
   fi
+  ;;
+mspconfig)
+  echo "print peer MSP config '${ORG_MSP}.json'"
+  execCommand mspconfig
+  ;;
+genesis)
+  echo "create genesis block for etcd raft consensus"
+  execCommand genesis
   ;;
 orderer-config)
   echo "print orderer RAFT consenter config [ ${START_SEQ} ${END_SEQ}]"
@@ -714,7 +723,7 @@ build-cds)
   buildFlogoChaincode
   ;;
 build-app)
-  echo "build executable for app: ${MODEL}"
+  echo "build executable for app: ${MODEL} ${GO_OS}"
   buildFlogoApp
   ;;
 *)

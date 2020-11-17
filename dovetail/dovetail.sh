@@ -17,43 +17,66 @@ BUILD_ARCH="amd64"
 # write result model json in DATA_ROOT/tool
 function configureApp {
   local network="${DATA_ROOT}/gateway/config/config_${CHANNEL_ID}.yaml"
+  local hostPattern="${DATA_ROOT}/gateway/config/matchers.yaml"
   if [ ! -f "${network}" ]; then
-    echo "config ${network} file not found, create it by using '../service/gateway.sh config -p ${ORG_ENV} -c ${CHANNEL_ID}'"
+    echo "config ${network} file not found, create it by using '../service/gateway.sh config ...'"
     return 1
   fi
 
   local modelFile=${MODEL##*/}
   local modelName=${modelFile%.*}
   modelName=${modelName//_/-}
-  echo "config client app for model ${MODEL} with ${network}"
+  echo "replace model ${MODEL} with network connection ${network}"
   setNetworkConfig "${MODEL}" "${network}" > ${MODEL}.tmp
-  setEntityMatcher "${MODEL}.tmp" | ${stee} ${DATA_ROOT}/tool/${modelFile} > /dev/null
+  if [ -f "${hostPattern}" ]; then
+    echo "replace model ${MODEL} with host pattern ${hostPattern}"
+  else
+    echo "remove host pattern from ${MODEL}"
+  fi
+  setEntityMatcher "${MODEL}.tmp" "${hostPattern}" | ${stee} ${DATA_ROOT}/tool/${modelFile} > /dev/null
   rm ${MODEL}.tmp
+  echo "edited app model is in ${DATA_ROOT}/tool/${modelFile}"
 
-  echo "create app k8s yaml files"
-  ${sumd} -p ${DATA_ROOT}/gateway/k8s
-  printStorageYaml ${modelName} | ${stee} ${DATA_ROOT}/gateway/k8s/${modelName}-pv.yaml > /dev/null
-  printAppYaml ${modelName} | ${stee} ${DATA_ROOT}/gateway/k8s/${modelName}.yaml > /dev/null
+  if [ "${ENV_TYPE}" != "docker" ]; then
+    echo "create app k8s yaml files"
+    ${sumd} -p ${DATA_ROOT}/gateway/k8s
+    printStorageYaml ${modelName} | ${stee} ${DATA_ROOT}/gateway/k8s/${modelName}-pv.yaml > /dev/null
+    printAppYaml ${modelName} | ${stee} ${DATA_ROOT}/gateway/k8s/${modelName}.yaml > /dev/null
+  fi
+}
+
+# goos default to linux, can make it to build executable for darwin
+# buildApp [goos]
+function buildApp {
+  local modelFile=${MODEL##*/}
+  local modelName=${modelFile%.*}
+  modelName=${modelName//_/-}
+
+  local _goos=${1:-"linux"}
+  # build executable for model
+  if [ ! -f "${DATA_ROOT}/tool/${modelFile}" ]; then
+    echo "model is not configured, so call config-app first."
+    return 1
+  fi
+  ${SCRIPT_DIR}/../msp/msp-util.sh build-app -p ${ORG_ENV} -t ${ENV_TYPE} -m "${DATA_ROOT}/tool/${modelFile}" -g ${_goos}
+  if [ ! -f "${DATA_ROOT}/tool/${modelName}_${_goos}_amd64" ]; then
+    echo "failed to build ${modelName}_${_goos}_amd64"
+    return 1
+  fi
+  ${sumv} ${DATA_ROOT}/tool/${modelName}_${_goos}_amd64 ${DATA_ROOT}/gateway
+  echo "executable in ${DATA_ROOT}/gateway/${modelName}_${_goos}_amd64"
 }
 
 function startApp {
   local modelFile=${MODEL##*/}
   local modelName=${modelFile%.*}
   modelName=${modelName//_/-}
-  if [ ! -f "${DATA_ROOT}/gateway/${modelName}_linux_amd64" ]; then
-    # need to build executable for model
-    if [ ! -f "${DATA_ROOT}/tool/${modelFile}" ]; then
-      echo "model is not configured, so call config-app first."
-      return 1
-    fi
-    if [ ! -f "${DATA_ROOT}/tool/${modelName}_linux_amd64" ]; then
-      ${SCRIPT_DIR}/../msp/msp-util.sh build-app -p ${ORG_ENV} -t ${ENV_TYPE} -m "${DATA_ROOT}/tool/${modelFile}"
-    fi
-    if [ ! -f "${DATA_ROOT}/tool/${modelName}_linux_amd64" ]; then
+  if [ ! -f "${DATA_ROOT}/gateway/${modelName}_linux_amd64" ] || [ ! -z "${REBUILD}" ]; then
+    buildApp "linux"
+    if [ ! -f "${DATA_ROOT}/gateway/${modelName}_linux_amd64" ]; then
       echo "failed to build ${modelName}_linux_amd64"
       return 1
     fi
-    ${sumv} ${DATA_ROOT}/tool/${modelName}_linux_amd64 ${DATA_ROOT}/gateway/${modelName}_linux_amd64
   fi
 
   echo "start app service ${modelName}"
@@ -120,11 +143,9 @@ function setEntityMatcher {
   # verify entity matcher file
   local matcherName=""
   local content=$(echo "entityMatchers:" | base64 | tr -d \\n)
-  if [ ! -z "${2}" ]; then
-    if [ -f "${2}" ]; then
-      matcherName="${2##*/}"
-      content=$(cat ${2} | base64 | tr -d \\n)
-    fi
+  if [ ! -z "${2}" ] && [ -f "${2}" ]; then
+    matcherName="${2##*/}"
+    content=$(cat ${2} | base64 | tr -d \\n)
   fi
 
   # print updated model json
@@ -350,23 +371,31 @@ function printHelp() {
   echo "  dovetail.sh <cmd> [options]"
   echo "    <cmd> - one of the following commands"
   echo "      - 'config-app' - config client app with specified network and entity matcher yaml; args: -m [-c -n -u]"
-  echo "      - 'start-app' - build and start kubernetes service for specified app model that is previously configured using config-app; args: -m"
+  echo "      - 'start-app' - build and start kubernetes service for specified app model that is previously configured using config-app; args: -m -f"
+  echo "      - 'build-app' - build a specified app model that is previously configured using config-app; args: -m -g"
   echo "      - 'stop-app' - shutdown kubernetes service for specified app model; args: -m [-d]"
-  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., netop1 (default)"
+  echo "    -p <property file> - the .env file in config folder that defines network properties, e.g., org1 (default)"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -m <json> - flogo model file in json format, e.g., marble.json"
+  echo "    -g <go-os> - Go OS of client app, e.g., linux (default) or darwin"
+  echo "    -f - used with start-app to force a rebuild"
   echo "    -c <channel-id> - channel for client app to invoke chaincode"
   echo "    -n <port-number> - service listen port, e.g. '7091' (default)"
   echo "    -u <user> - user that client app uses to connect to fabric network, e.g. 'Admin' (default)"
   echo "    -d - Delete app executable so it'll be rebuilt on next start-app"
   echo "  dovetail.sh -h (print this message)"
+  echo "  Example:"
+  echo "    ./dovetail.sh config-app -p org1 -m samples/marble_client/marble-client.json"
+  echo "    ./dovetail.sh start-app -p org1 -m marble-client.json"
 }
 
-ORG_ENV="netop1"
+ORG_ENV="org1"
 
 CMD=${1}
-shift
-while getopts "h?p:t:m:c:n:u:d" opt; do
+if [ "${CMD}" != "-h" ]; then
+  shift
+fi
+while getopts "h?p:t:m:g:c:n:u:df" opt; do
   case "$opt" in
   h | \?)
     printHelp
@@ -380,6 +409,12 @@ while getopts "h?p:t:m:c:n:u:d" opt; do
     ;;
   m)
     MODEL=$OPTARG
+    ;;
+  g)
+    GO_OS=$OPTARG
+    ;;
+  f)
+    REBUILD="true"
     ;;
   c)
     CHANNEL_ID=$OPTARG
@@ -396,11 +431,6 @@ while getopts "h?p:t:m:c:n:u:d" opt; do
 done
 
 source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORG_ENV} ${ENV_TYPE}
-if [ "${ENV_TYPE}" == "docker" ]; then
-  echo "docker not supported"
-  exit 1
-fi
-
 if [ -z "${CHANNEL_ID}" ]; then
   CHANNEL_ID=${TEST_CHANNEL}
 fi
@@ -427,6 +457,14 @@ start-app)
     exit 1
   fi
   startApp
+  ;;
+build-app)
+  echo "build client app for model ${MODEL} ${GO_OS}"
+  if [ -z "${MODEL}" ]; then
+    echo "app model is not specified"
+    exit 1
+  fi
+  buildApp ${GO_OS}
   ;;
 stop-app)
   echo "shutdown kubernetes service for client app for model ${MODEL}"

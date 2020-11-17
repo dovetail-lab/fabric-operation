@@ -1,138 +1,176 @@
 # Build and deploy Dovetail flows
 
-When [Dovetail](https://github.com/dovetail-lab/dovetail) is used to develop chaincode and client apps for Hyperledger Fabric, the Flogo flows can be built and deployed to Kubernetes locally or in cloud using scripts in this section.
+When [Dovetail](https://github.com/dovetail-lab/dovetail) is used to develop chaincode and client apps for Hyperledger Fabric, the Flogo flows can be built and deployed locally or in cloud using scripts in this folder.
 
-## Build chaincode flow in cloud
+## Use docker-compose on local PC
 
-Chaincode flow model can be edited using [TIBCO Flogo® Enterprise v2.10.0](https://docs.tibco.com/products/tibco-flogo-enterprise-2-10-0), and exported as a JSON file, e.g., [marble.json](./samples/marble/marble.json) in the samples folder.
+On a Mac or Linux PC with docker installed, you can use the following scripts to start a Fabric network, and deploy a Dovetail app that contains a chaincode and a client service, and perform an end-to-end test by using a REST client.
 
-First, start a Fabric network in one of the supported cloud services, e.g. Azure as described in [README](../az/README.md). You can then build the chaincode as `CDS` format using the following script on the `bastion` host:
-
-```bash
-cd ${HOME}/fabric-operation/msp
-./msp-util.sh start
-
-# wait until tool container is running
-./msp-util.sh build-cds -m ../dovetail/samples/marble/marble.json -v 1.0
-```
-
-This will generate a `CDS` file: `/mnt/share/netop1.com/tool/marble_cc_1.0.cds`, which can be installed and instantiated on a Fabric network hosted by any cloud service.
-
-The above command used a sample chaincode downloaded from `Github` during the initialization of the `bastion` host. If you want to build a new chaincode on your local PC, however, you can use the utility script to upload your chaincode flow model from local PC to the `bastion` host, and then build it, e.g. for Azure,
+### Start CA server and create crypto data
 
 ```bash
-cd ../az
-./az-util.sh upload-folder -f ../../samples/audit
+cd /path/to/fabric-operation/ca
+./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d
 ```
 
-This will upload the `audit` sample in the local project to the `${HOME}` directory of the `bastion` host in Azure. You can then build the `CDS` file, `audit_cc_1.0.cds` on the Azure `bastion` host:
+Refer to [README](https://github.com/dovetail-lab/fabric-operation/blob/master/ca/README.md) for more details of the crypto utility scripts.
+
+### Generate Fabric network and channel artifacts
 
 ```bash
-cd ${HOME}/dovetail-lab/fabric-operation/msp
-./msp-util.sh build-cds -m ${HOME}/audit/audit.json
+cd ../msp
+./bootstrap.sh -t docker -o orderer -p org1 -p org2
 ```
 
-You can then download the `CDS` file from the `bastion` host, and so the same chaincode can be installed/instantiated any other Fabric network:
+Refer to [README](https://github.com/dovetail-lab/fabric-operation/blob/master/msp/README.md) for more details of the MSP utility scripts.
 
-```bash
-cd ../az
-./az-util.sh download-file -f /mnt/share/netop1.com/tool/audit_cc_1.0.cds -l /path/to/download
-```
-
-For other cloud services, refer [AWS](../aws/README.md) and [GCP](../gcp/README.md) for similar commands.
-
-If you have installed `docker` on your local PC, you can also use the [build.sh](https://github.com/dovetail-lab/fabric-cli/blob/master/scripts/build.sh) script to build `cds` package of Dovetail chaincodes.
-
-## Install and instantiate chaincode
-
-The `CDS` file can be used to install and instantiate the chaincode on a Fabric network. The script for chaincode management is described in the [network](../network/README.md) folder. To see how it works, you can create a test channel, and then instantiate the `marble_cc_1.0.cds` as follows:
+### Start Fabric network
 
 ```bash
 cd ../network
-# smoke test to create mychannel and join both peer nodes
-./network.sh test
-
-# install cds file from cli working folder, which is created during the build step
-./network.sh install-chaincode -n peer-0 -f marble_cc_1.0.cds
-./network.sh install-chaincode -n peer-1 -f marble_cc_1.0.cds
-
-# instantiate the chaincode
-./network.sh instantiate-chaincode -n peer-0 -c mychannel -s marble_cc -v 1.0 -m '{"Args":["init"]}'
+./network.sh start -t docker -o orderer -p org1 -p org2
 ```
 
-If the [gateway service](../service/README.md) is running, you can send the following transaction from Swagger-ui to verify that the chaincode is instantiated successfully:
+This will start a Fabric network including docker containers of 3 orderers and 4 peers. Refer to [README](https://github.com/dovetail-lab/fabric-operation/blob/master/network/README.md) for more details of the network utility scripts.
+
+### Build and test a sample Dovetail chaincode
+
+```bash
+cd ../network
+./smoke-test.sh docker dovetail
+```
+
+This will install and test the sample [marble_cc](./samples/marble) chaincode. Refer to [Samples](https://github.com/dovetail-lab/fabric-samples) for more details about the zero-code development of Fabric chaincode.
+
+### Build and run client service
+
+This step will configure and run a client service that makes the `marble_cc` chaincode accessible via REST APIs.
+
+First, export the connection info of the Fabric network:
+
+```bash
+cd ../service
+./gateway.sh config -t docker -o orderer -p org1 -p org2
+```
+
+Second, configure the client service app [marble-client](.samples/marble_client) to use the exported network connection info:
+
+```bash
+cd ../dovetail
+./dovetail.sh config-app -t docker -p org1 -m samples/marble_client/marble-client.json
+```
+
+Then, build and run the client service:
+
+```bash
+./dovetail.sh build-app -t docker -p org1 -m marble-client.json -g darwin
+
+FLOGO_APP_PROP_RESOLVERS=env FLOGO_APP_PROPS_ENV=auto PORT=8989 APPUSER=Admin FLOGO_LOG_LEVEL=DEBUG FLOGO_SCHEMA_SUPPORT=true FLOGO_SCHEMA_VALIDATION=false CRYPTO_PATH=/Users/yxu/work/dovetail-lab2/fabric-operation/org1.example.com/gateway ../org1.example.com/gateway/marble-client_darwin_amd64
+```
+
+The client service opens a port `8989` for REST API calls.
+
+### Invoke chaincode using REST APIs
+
+Import the test message [collection](https://github.com/dovetail-lab/fabric-samples/blob/master/marble/marble.postman_collection.json) to [Postman](https://www.postman.com/downloads/), and send the REST requests to update and query the `marble` chaincode.
+
+### Shutdown and cleanup
+
+Quit client service by `Ctrl+C`, and then stop and cleanup the Fabric network:
+
+```bash
+cd ../network
+./network.sh shutdown -t docker -o orderer -p org1 -p org2 -d
+cd ../msp
+./msp-util.sh shutdown -t docker -p org1
+```
+
+## Use Kubernetes on local PC
+
+The following steps are verified for Kubernetes on `Docker Desktop` for Mac.
+
+### Configure and start Fabric network in Kubernetes
+
+These steps are the same as those of `docker-compose` described in the previous section. Without a flag `-t`, the scripts use `Kubernetes` by default:
+
+```bash
+cd /path/to/fabric-operation/ca
+./bootstrap.sh -o orderer -p org1 -p org2 -d
+
+cd ../msp
+./bootstrap.sh -o orderer -p org1 -p org2
+
+cd ../network
+./network.sh start -o orderer -p org1 -p org2
+./smoke-test.sh "" dovetail
+```
+
+### Configure and start REST gateway service
+
+```bash
+cd ../service
+./gateway.sh config -o orderer -p org1 -p org2
+./gateway.sh start -p org1
+```
+
+The gateway service opens a port `30081` for Swagger UI that you can use to send chaincode requests. Refer [README](../service/README.md) for more details of the gateway service.
+
+### Test chaincode using Swagger UI
+
+Open the Swagger UI in a web-browser: [http://localhost:30081/swagger](http://localhost:30081/swagger).
+
+Click `Try it out` for `/v1/connection`, and execute the following request:
 
 ```json
 {
-  "connection_id": "16453564131388984820",
-  "type": "INVOKE",
-  "chaincode_id": "marble_cc",
-  "transaction": "initMarble",
-  "parameter": ["marble1", "blue", "35", "tom"]
+  "channelId": "mychannel",
+  "userName": "Admin",
+  "orgName": "org1"
 }
 ```
 
-## Build client app flow and deploy as Kubernetes service
+It will return a `connectionId`: `10375918345828239422`.
 
-Fabric client flows modeled using Flogo Enterprise can also be built in cloud on a `bastion` host, and then run as a Kubernetes service. The following scripts can be used on a `bastion` host of any supported cloud environment, i.e., [Azure](../az), [AWS](../aws), or [GCP](../gcp).
+Click `Try it out` for `/v1/transaction`, and execute the following query
 
-```bash
-# generate network config file if it is not already created
-cd ../service
-./gateway.sh config
-
-# config app flow model to use the above configured Fabric network yaml
-cd ../dovetail
-./dovetail.sh config-app -m ./samples/marble_client/marble_client.json
-
-# build the appp and start 2 PODs and expose end-point using a load-balancer service
-./dovetail.sh start-app -m marble_client.json
+```json
+{
+  "connectionId": "10375918345828239422",
+  "type": "QUERY",
+  "chaincodeId": "marble_cc",
+  "transaction": "readMarble",
+  "parameter": ["marble1"]
+}
 ```
 
-When the above script is invoked on a `bastion` host, it will start 2 instances of `marble_client` and expose the service end-point as a load-balancer service in corresponding cloud platform. When it is invoked on local Kubernetes of `Docker Desktop`, it will start 2 PODs for `marble_client` and expose the service end-point as a random `Node Port`. The service URL is printed out by the script, e.g.,
+It will return the attributes of `marble1` that the smoke test created on the `mychannel` chain.
 
-```
-access marble-client service at http://localhost:32634
-```
+Click `Try it out` for `/v1/transaction` again, and execute the following transaction to transfer `marble1` to a new owner `jerry`:
 
-Use this URL to send REST service requests to test the system.
-
-Finally, you can shutdown the client PODs and service using the following command:
-
-```bash
-./dovetail.sh stop-app -m marble_client.json
-```
-
-## Configure client services in multi-org network
-
-When a Fabric network contains multiple participating organizations, each organization may start its own orderer and/or peer nodes, and each organization may also run its own client services.
-
-A network operator can start a Fabric network with a single organization, and then invite more organizations to join the network. New organizations can be added to the network using scripts described [here](../operations.md#add-new-peer-org-to-the-same-kubernetes-cluster).
-
-To configure a client service that interact with peer nodes of multiple organizations, you can run the following scripts to create a network config file containing list of peers from multiple organizations:
-
-```bash
-cd ../service
-# create network config file for 2 different orgs
-./gateway.sh config -p netop1 -c mychannel
-./gateway.sh config -p peerorg1 -c mychnnel
-
-# add peerorg1 peers to config file for netop1
-yq m ../netop1.com/gateway/config/config_mychannel.yaml ../peerorg1.com/gateway/config/config_mychannel.yaml > /tmp/config_mychannel.yaml
-cp /tmp/config_mychannel.yaml ../netop1.com/gateway/config
-
-# copy crypto data of peerorg1 for the client service (only TLS certs are required, private user data should not be copied)
-cp -R ../peerorg1.com/gateway/peerorg1.com ../netop1.com/gateway
-
-# use the new network config file to configure client service, e.g.
-cd ../dovetail
-./dovetail.sh config-app -p netop1 -m ./samples/marble_client/marble_client.json
+```json
+{
+  "connectionId": "10375918345828239422",
+  "type": "INVOKE",
+  "chaincodeId": "marble_cc",
+  "transaction": "transferMarble",
+  "parameter": ["marble1", "jerry"]
+}
 ```
 
-Note that the above script uses a tool `yq` to merge 2 `yaml` files. The tool can be downloaded as follows, e.g., for Mac,
+Run the above query again, you should see that the `marble1` has been changed owner from `tom` to `jerry`.
 
-```bash
-curl -OL https://github.com/mikefarah/yq/releases/download/2.4.1/yq_darwin_amd64
-chmod +x yq_darwin_amd64
-sudo mv yq_darwin_amd64 /usr/local/bin/yq
+Run the following query should return the full state change history of the `marble1`:
+
+```json
+{
+  "connectionId": "10375918345828239422",
+  "type": "QUERY",
+  "chaincodeId": "marble_cc",
+  "transaction": "getHistoryForMarble",
+  "parameter": ["marble1"]
+}
 ```
+
+## Build and run Dovetail app in cloud
+
+The same scripts can be used to build and run Dovetail applications in Cloud. Refer to the following links for detailed steps on [Azure](../az/README.md), [AWS](../aws/README.md), and [Google](../gcp/README.md).

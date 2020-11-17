@@ -40,12 +40,48 @@ function waitForCA {
   echo "CA container count for ${ORG}: ${ups}"
 }
 
+function copySharedTLSCerts {
+# share tls crypto data between peer orgs
+  for po in "${PEER_ENVS[@]}"; do
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
+    for f in ${ORDERER_DATA_ROOT}/tool/crypto/*; do
+      if [ -d $f ]; then
+        local dir=$(basename $f)
+        if [ "$dir" == "msp" ]; then
+          dir=${ORDERER_ORG}
+        fi
+        if [ "$dir" != "orderers" ] && [ "$dir" != "${FABRIC_ORG}" ]; then
+          echo "copy tls certs from $f/tlscacerts to ${DATA_ROOT}/cli/crypto/${dir}"
+          if [ -d ${DATA_ROOT}/cli/crypto/${dir}/tlscacerts ]; then
+            ${surm} -R ${DATA_ROOT}/cli/crypto/${dir}
+          fi
+          ${sumd} -p ${DATA_ROOT}/cli/crypto/${dir}
+          ${sucp} -R $f/tlscacerts ${DATA_ROOT}/cli/crypto/${dir}
+
+          echo "copy tls certs from $f/tlscacerts to ${DATA_ROOT}/gateway/${dir}"
+          if [ -d ${DATA_ROOT}/gateway/${dir}/tlscacerts ]; then
+            ${surm} -R ${DATA_ROOT}/gateway/${dir}
+          fi
+          ${sumd} -p ${DATA_ROOT}/gateway/${dir}
+          ${sucp} -R $f/tlscacerts ${DATA_ROOT}/gateway/$dir
+
+          if [ -f $f/ca/tls/server.crt ]; then
+            echo "copy ca server certs from $f/ca/tls to ${DATA_ROOT}/gateway/${dir}/ca/tls"
+            ${sumd} -p ${DATA_ROOT}/gateway/${dir}/ca/tls
+            ${sucp} $f/ca/tls/server.crt ${DATA_ROOT}/gateway/${dir}/ca/tls
+          fi
+        fi
+      fi
+    done
+  done
+}
+
 # Print the usage message
 function printHelp() {
   echo "Create crypto data for orderers, peers and users of specified organizations"
   echo "Usage: "
   echo "  bootstrap.sh -o <orderer-org> [-p <peer-org>] [-t <env type>] [-d]"
-  echo "    -o <orderer-org> - the .env file in config folder that defines properties of the orderer org, e.g., orderer (default)"
+  echo "    -o <orderer-org> - the .env file in config folder that defines properties of the orderer org, e.g., orderer"
   echo "    -p <peer-org> - the .env file in config folder that defines properties of a peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -d - shutdown and delete all ca/tlsca server data after bootstrap"
@@ -54,8 +90,7 @@ function printHelp() {
   echo "    ./bootstrap.sh -t docker -o orderer -p org1 -p org2 -d"
 }
 
-ORDERER_ORG="orderer"
-PEER_ORGS=()
+PEER_ENVS=()
 
 while getopts "h?o:p:t:d" opt; do
   case "$opt" in
@@ -64,10 +99,10 @@ while getopts "h?o:p:t:d" opt; do
     exit 0
     ;;
   o)
-    ORDERER_ORG=$OPTARG
+    ORDERER_ENV=$OPTARG
     ;;
   p)
-    PEER_ORGS+=($OPTARG)
+    PEER_ENVS+=($OPTARG)
     ;;
   t)
     ENV_TYPE=$OPTARG
@@ -78,8 +113,14 @@ while getopts "h?o:p:t:d" opt; do
   esac
 done
 
-ORGS=($ORDERER_ORG)
-for p in "${PEER_ORGS[@]}"; do 
+if [ -z ${ORDERER_ENV} ] || [ ${#PEER_ENVS[@]} -eq 0 ]; then
+  echo "Must specify orderer org and at least a peer org"
+  printHelp
+  exit 1
+fi
+
+ORGS=($ORDERER_ENV)
+for p in "${PEER_ENVS[@]}"; do 
   ORGS+=($p)
 done
 
@@ -101,24 +142,21 @@ for o in "${ORGS[@]}"; do
   echo "bootstrap crypto for $o"
   source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${o} ${ENV_TYPE}
   ./ca-crypto.sh bootstrap -t "${ENV_TYPE}" -p ${o}
-  if [ "${o}" == "${ORDERER_ORG}" ]; then
+  if [ "${o}" == "${ORDERER_ENV}" ]; then
     ORDERER_DATA_ROOT=${DATA_ROOT}
+    ORDERER_ORG=${FABRIC_ORG}
     echo "ORDERER_DATA_ROOT: ${ORDERER_DATA_ROOT}"
   else
-    # TODO: orderer tool need crypto/msp of all peer-orgs, name the folder ${FABRIC_ORG} instead of ${ORG}
-    echo "copy tools data from ${DATA_ROOT} to ${ORDERER_DATA_ROOT}"
-    if [ ! -d "${ORDERER_DATA_ROOT}/tool/crypto/${ORG}" ]; then
-      cp -R ${DATA_ROOT}/tool/crypto/msp ${ORDERER_DATA_ROOT}/tool/crypto/${ORG}
-    fi
-    # TODO: handle this generally, cli need crypto/msp/tlscacerts from orderer and other peer-orgs (ref network.sh)
-    echo "copy cli data from ${ORDERER_DATA_ROOT}" to ${DATA_ROOT}
-    if [ ! -d "${DATA_ROOT}/cli/crypto/orderer-0/msp" ]; then
-      mkdir -p ${DATA_ROOT}/cli/crypto/orderer-0/msp
-      cp -R ${ORDERER_DATA_ROOT}/crypto/msp/tlscacerts ${DATA_ROOT}/cli/crypto/orderer-0/msp 
-    fi
-    # TODO: gateway need crypto/msp/tlscacerts from orderer and other peer-orgs
+    # sharing msp and ca server cert of peer orgs with the orderer org
+    echo "copy peer msp data from ${DATA_ROOT}/crypto/msp to ${ORDERER_DATA_ROOT}/tool/crypto/${FABRIC_ORG}"
+    ${sucp} -R ${DATA_ROOT}/crypto/msp ${ORDERER_DATA_ROOT}/tool/crypto/${FABRIC_ORG}
+    ${sumd} -p ${ORDERER_DATA_ROOT}/tool/crypto/${FABRIC_ORG}/ca/tls
+    ${sucp} ${DATA_ROOT}/crypto/ca/tls/server.crt ${ORDERER_DATA_ROOT}/tool/crypto/${FABRIC_ORG}/ca/tls
   fi
 done
+
+# share tls crypt data between peer orgs
+copySharedTLSCerts
 
 if [ ! -z "${CLEANUP}" ]; then
   for org in "${ORGS[@]}"; do 
@@ -127,4 +165,4 @@ if [ ! -z "${CLEANUP}" ]; then
   done
 fi
 
-echo "crypto data for ${ORDERER_ORG} are generated in ${ORDERER_DATA_ROOT}"
+echo "crypto data for ${ORDERER_ENV} are generated in ${ORDERER_DATA_ROOT}"

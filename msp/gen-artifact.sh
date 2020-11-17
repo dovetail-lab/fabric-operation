@@ -143,14 +143,8 @@ orderer-config)
   echo "created RAFT consenter config: ordererConfig-${1}.json"
   ;;
 genesis)
-  if [ -z "${ARGS}" ]; then
-    echo "orderer type not specified for genesis block"
-    printUsage
-    exit 1
-  else
-    echo "create genesis block for orderer type [ ${ARGS} ]"
-    createGenesisBlock ${ARGS}
-  fi
+  echo "create genesis block for etcd raft consensus"
+  createGenesisBlock ${ARGS}
   ;;
 channel)
   if [ -z "${ARGS}" ]; then

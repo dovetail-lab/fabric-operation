@@ -15,19 +15,7 @@ channels:
         ledgerQuery: true
         eventSource: true
 
-      peer1.org1.example.com:
-        endorsingPeer: true
-        chaincodeQuery: true
-        ledgerQuery: true
-        eventSource: true
-
       peer0.org2.example.com:
-        endorsingPeer: true
-        chaincodeQuery: true
-        ledgerQuery: true
-        eventSource: true
-
-      peer1.org2.example.com:
         endorsingPeer: true
         chaincodeQuery: true
         ledgerQuery: true
@@ -39,7 +27,6 @@ organizations:
     cryptoPath:  peerOrganizations/org1.example.com/users/{username}@org1.example.com/msp
     peers:
       - peer0.org1.example.com
-      - peer1.org1.example.com
     certificateAuthorities:
       - ca.org1.example.com
 
@@ -48,7 +35,6 @@ organizations:
     cryptoPath:  peerOrganizations/org2.example.com/users/{username}@org2.example.com/msp
     peers:
       - peer0.org2.example.com
-      - peer1.org2.example.com
     certificateAuthorities:
       - ca.org2.example.com
 
@@ -56,7 +42,7 @@ orderers:
   orderer.example.com:
     url: orderer.example.com:7050
     tlsCACerts:
-      path: ${CRYPTO_PATH}/ordererOrganizations/example.com/tlsca/tlsca.example.com-cert.pem
+      path: ${CRYPTO_PATH}/ordererOrganizations/example.com/msp/tlscacerts/tlsca.example.com-cert.pem
 
 peers:
   peer0.org1.example.com:
@@ -66,24 +52,10 @@ peers:
     tlsCACerts:
       path: ${CRYPTO_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
 
-  peer1.org1.example.com:
-    url: peer1.org1.example.com:8051
-    #grpcOptions:
-    #  ssl-target-name-override: peer1.org1.example.com
-    tlsCACerts:
-      path: ${CRYPTO_PATH}/peerOrganizations/org1.example.com/tlsca/tlsca.org1.example.com-cert.pem
-
   peer0.org2.example.com:
     url: peer0.org2.example.com:9051
     #grpcOptions:
     #  ssl-target-name-override: peer0.org2.example.com
-    tlsCACerts:
-      path: ${CRYPTO_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
-
-  peer1.org2.example.com:
-    url: peer1.org2.example.com:10051
-    #grpcOptions:
-    #  ssl-target-name-override: peer1.org2.example.com
     tlsCACerts:
       path: ${CRYPTO_PATH}/peerOrganizations/org2.example.com/tlsca/tlsca.org2.example.com-cert.pem
 

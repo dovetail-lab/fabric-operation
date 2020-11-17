@@ -89,7 +89,7 @@ It should list folders containing crypto data, i.e., `canet`, `cli`, `crypto`, `
 
 ```bash
 cd ../msp
-./bootstrap.sh -o orderer -p org1 -p org2 -d
+./bootstrap.sh -o orderer -p org1 -p org2
 ```
 
 This command starts a Kubernetes POD to generate the genesis block and transaction for creating a test channel `mychannel` based on the network specification. You can verify the result using the following commands:
@@ -127,14 +127,13 @@ This command creates the test channel `mychannel`, installs and instantiates the
 
 ### Start client gateway service and use REST APIs to test chaincode
 
-TODO: updated required here.
-
 Refer [gateway](../service/README.md) for more details on how to build and start a REST API service for applications to interact with one or more Fabric networks. The following command starts a gateway service from the bastion host by using the pre-built executable `gateway-linux`.
 
 ```bash
 # config and start gateway service for GCP
 cd ../service
-./gateway.sh start
+./gateway.sh config -o orderer -p org1 -p org2
+./gateway.sh start -p org1
 ```
 
 The last command started 2 PODs to run the gateway service, and created a load-balancer service with a publicly accessible port. The load-balancer port is open to public by default, which is convenient for dev and test. To restrict the access of source IPs, you can add a field `loadBalancerSourceRanges` to the gateway service definition. Refer the [link](https://kubernetes.io/docs/tasks/access-application-cluster/configure-cloud-provider-firewall/#restrict-access-for-loadbalancer-service) for more details.
@@ -151,13 +150,13 @@ Verify the gateway connection by posting following request to `/v1/connection`:
 
 ```json
 {
-  "channel_id": "mychannel",
-  "user_name": "Admin",
-  "org_name": "netop1"
+  "channelId": "mychannel",
+  "userName": "Admin",
+  "orgName": "org1"
 }
 ```
 
-It will return a `connection_id`: `16453564131388984820`.
+It will return a `connection_id`: `10375918345828239422`.
 
 ### Build and start Dovetail chaincode and service
 
@@ -168,22 +167,28 @@ A Dovetail chaincode model, e.g., [marble.json](../dovetail/samples/marble/marbl
 ```bash
 # create chaincode package
 cd ../msp
-./msp-util.sh build-cds -m ../dovetail/samples/marble/marble.json
+./msp.util.sh start -p org1
+./msp-util.sh build-cds -p org1 -p org2 -m ../dovetail/samples/marble/marble.json
 
-# install and instantiate chaincode
+# install package marble_cc_1.0.tar.gz
 cd ../network
-./network.sh install-chaincode -n peer-0 -f marble_cc_1.0.cds
-./network.sh install-chaincode -n peer-1 -f marble_cc_1.0.cds
-./network.sh instantiate-chaincode -n peer-0 -c mychannel -s marble_cc -v 1.0 -m '{"Args":["init"]}'
+./network.sh install-chaincode -p org1 -n peer-0 -f marble_cc_1.0.tar.gz
+./network.sh install-chaincode -p org2 -n peer-0 -f marble_cc_1.0.tar.gz >&log.txt
+local packageID=$(cat log.txt | grep "Chaincode code package identifier:" | sed 's/.*Chaincode code package identifier: //' | tr -d '\r')
+
+# approve installed package: ${packageID}
+./network.sh approve-chaincode -p org1 -c mychannel -k ${packageID} -s marble_cc
+./network.sh approve-chaincode -p org2 -c mychannel -k ${packageID} -s marble_cc
+./network.sh commit-chaincode -p org1 -p org2 -c mychannel -s marble_cc
 ```
 
 You can send test transactions by using the Swagger UI of the gateway service, e.g., insert a new marble by posting the following transaction to `/v1/transaction`:
 
 ```json
 {
-  "connection_id": "16453564131388984820",
+  "connectionId": "10375918345828239422",
   "type": "INVOKE",
-  "chaincode_id": "marble_cc",
+  "chaincodeId": "marble_cc",
   "transaction": "initMarble",
   "parameter": ["marble1", "blue", "35", "tom"]
 }
@@ -194,12 +199,12 @@ By using the same `Flogo` modeling UI, we can implement a client app, e.g., [mar
 ```bash
 # generate network config if skipped the previous gateway test
 cd ../service
-./gateway.sh config
+./gateway.sh config -o orderer -p org1 -p org2
 
 # build and start client using the generated network config
 cd ../dovetail
-./dovetail.sh config-app -m samples/marble_client/marble_client.json
-./dovetail.sh start-app -m marble_client.json
+./dovetail.sh config-app -p org1 -m samples/marble_client/marble-client.json
+./dovetail.sh start-app -p org1 -m marble-client.json
 ```
 
 The above command will start 2 instances of the `marble-client` and expose a `load-balancer` end-point for other applications to invoke the service. Once the script completes successfully, it will print out the service end-point as, e.g.,
@@ -213,7 +218,7 @@ You can use this end-point to update or query the blockchain ledger. [marble.pos
 Stop the client app after tests complete:
 
 ```bash
-./dovetail.sh stop-app -m marble_client.json
+./dovetail.sh stop-app -p org1 -m marble-client.json
 ```
 
 ### Stop Fabric network and cleanup persistent data

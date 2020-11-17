@@ -1,5 +1,7 @@
 # Network operations
 
+TODO: update required for this doc
+
 After a bootstrap Fabric network is started, you can use the following scripts to deploy your application and scale.
 
 ## Create new channel

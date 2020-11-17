@@ -19,6 +19,9 @@ You can then build the gateway service using the [Makefile](./Makefile), i.e.,
 # build gateway service for linux and mac
 cd ../service
 make
+
+# copy gateway executables to deployment folder
+make dist
 ```
 
 ## Start Fabric network using Kubernetes
@@ -27,37 +30,36 @@ Before starting the gateway service, you can follow the instructions in [README.
 
 ```bash
 cd ../ca
-./ca-server.sh start
-./ca-crypto.sh bootstrap
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 cd ../msp
-./msp-util.sh start
-./msp-util.sh bootstrap
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 cd ../network
-./network.sh start
-./network.sh test
+./network.sh start -o orderer -p org1 -p org2
+./smoke-test.sh
 ```
 
-The above sequence of commands created a Fabric network from scratch, and deployed a sample chaincode `mycc` to a test channel `mychannel`.
+The above sequence of commands created a Fabric network from scratch, and deployed a sample chaincode `sacc` to a test channel `mychannel`.
 
 ## Start gateway service
 
-Use the following commands to start 2 Kubernetes PODs to run the gateway service on Mac `docker-desktop`:
+Use the following commands to start 2 Kubernetes PODs to run the gateway service on Mac `Docker Desktop`:
 
 ```bash
 cd ../service
-./gateway.sh start
+./gateway.sh config -o orderer -p org1 -p org1
+./gateway.sh start -p org1
 ```
 
-On a Mac, this gateway service listens to REST requests on a `NodePort`: `30081`. You can also run the service on a cloud provider. The scripts support [AWS](../aws), [Azure](../az), and [GCP](../gcp). Click one of the links to see how easy it is to start a Hyperledger Fabric network in the cloud, and expose the blockchain as a public service via this `gateway service`.
+On a Mac, this gateway service listens to REST requests on a `NodePort`: `30081`. You can also run the service on a cloud provider. The scripts support [AWS](../aws), [Azure](../az), and [Google](../gcp). Click one of the links for the detailed steps on each platform.
 
-If you want to use this service to test chaincode deployed on a local `byfn` network (in the fabric-samples), you can also run the service without Kubernetes, i.e.,
+If you want to use this service to test chaincode deployed on a local fabric test-network (in the fabric-samples), you can also run the service without Kubernetes, i.e.,
 
 ```bash
 cd ../service
 make run
 ```
 
-## Invoke Fabric transactions using Swagger-UI
+## Invoke Fabric transactions using Swagger UI
 
 Open the Swagger UI in Chrome web-browser: [http://localhost:30081/swagger](http://localhost:30081/swagger).
 
@@ -70,43 +72,43 @@ Click `Try it out` for `/v1/connection`, and execute the following request
 
 ```json
 {
-  "channel_id": "mychannel",
-  "user_name": "Admin",
-  "org_name": "netop1"
+  "channelId": "mychannel",
+  "userName": "Admin",
+  "orgName": "org1"
 }
 ```
 
-It will return a `connection_id`: `16453564131388984820`.
+It will return a `connectionId`: `10375918345828239422`.
 
 Click `Try it out` for `/v1/transaction`, and execute the following query
 
 ```json
 {
-  "connection_id": "16453564131388984820",
+  "connectionId": "10375918345828239422",
   "type": "QUERY",
-  "chaincode_id": "mycc",
-  "transaction": "query",
+  "chaincodeId": "sacc",
+  "transaction": "get",
   "parameter": ["a"]
 }
 ```
 
-It will return the current state of `a` on the sample Fabric channel, e.g. `90`.
+It will return the current state of `a` on the sample Fabric channel, e.g. `100`.
 
-Click `Try it out` for `/v1/transaction` again, and execute the following transaction to reduce the value of `a` by `10`
+Click `Try it out` for `/v1/transaction` again, and execute the following transaction to set the value of `b` to `200`
 
 ```json
 {
-  "connection_id": "16453564131388984820",
+  "connectionId": "10375918345828239422",
   "type": "INVOKE",
-  "chaincode_id": "mycc",
-  "transaction": "invoke",
-  "parameter": ["a", "b", "10"]
+  "chaincodeId": "sacc",
+  "transaction": "set",
+  "parameter": ["b", "200"]
 }
 ```
 
-Execute the above query again, it should return a reduced value of `a`, e.g., `80`.
+Execute the above query again, it should return a reduced value of `b`, e.g., `200`.
 
-Note that this gateway service can be used to test any instantiated chaincode, and it supports connections to multiple channels or networks, as long as the connection is configured by using the script `./gateway.sh config [options]`. You can also use a gRPC client to send API requests to the gateway service.
+Note that this gateway service can be used to test any chaincode, and it supports connections to multiple channels or networks, as long as the connection is configured by using the script `./gateway.sh config [options]`. You can also use a gRPC client to send API requests to the gateway service.
 
 ## TODO
 
