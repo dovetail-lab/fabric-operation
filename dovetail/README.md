@@ -44,7 +44,7 @@ This will install and test the sample [marble_cc](./samples/marble) chaincode. R
 
 ### Build and run client service
 
-This step will configure and run a client service that makes the `marble_cc` chaincode accessible via REST APIs.
+This step will configure and run a client service, [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
 
 First, export the connection info of the Fabric network:
 
@@ -68,7 +68,7 @@ Then, build and run the client service:
 FLOGO_APP_PROP_RESOLVERS=env FLOGO_APP_PROPS_ENV=auto PORT=8989 APPUSER=Admin FLOGO_LOG_LEVEL=DEBUG FLOGO_SCHEMA_SUPPORT=true FLOGO_SCHEMA_VALIDATION=false CRYPTO_PATH=/Users/yxu/work/dovetail-lab2/fabric-operation/org1.example.com/gateway ../org1.example.com/gateway/marble-client_darwin_amd64
 ```
 
-The client service opens a port `8989` for REST API calls.
+The client service opens a port `8989` for REST API calls. It also specifies `Admin` as the `APPUSER` that is used to send chaincode requests by this client service. This variable can be configured as any user of `org1`, e.g., `Alice` or `Bob` which are also specified in [org1.env](../config/org1.env) and created during the bootstrap process.
 
 ### Invoke chaincode using REST APIs
 
@@ -87,7 +87,7 @@ cd ../msp
 
 ## Use Kubernetes on local PC
 
-The following steps are verified for Kubernetes on `Docker Desktop` for Mac.
+The following steps are verified for Kubernetes of `Docker Desktop` on Mac. It is required that you enable Kubernetes on `Docker Desktop`.
 
 ### Configure and start Fabric network in Kubernetes
 
@@ -169,6 +169,42 @@ Run the following query should return the full state change history of the `marb
   "transaction": "getHistoryForMarble",
   "parameter": ["marble1"]
 }
+```
+
+### Build and run client service in Kubernetes
+
+You can configure and run a client service, [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
+Use the following script to build and run the client app as a Kubernetes service.
+
+```bash
+# generate network config if skipped the previous gateway test
+cd ../service
+./gateway.sh config -o orderer -p org1 -p org2
+
+# build and start client using the generated network config
+cd ../dovetail
+./dovetail.sh config-app -p org1 -m samples/marble_client/marble-client.json -u Alice
+./dovetail.sh start-app -p org1 -m marble-client.json -f
+```
+
+Notice that optionally you can specify a user name `Alice` in the specified organization `org1`, because this Dovetail model uses an environment variable `APPUSER` to configure the blockchain user used to invoke chaincode transactions. If the argument `-u` is not specified, it will use the default user `Admin`, which has been configured for both `org1` and `org2`. Besides, the flag `-f` forces a rebuild of the application to make sure that it picks the correct connection info of the Fabric network.
+
+The above command will start 2 Kubernetes PODs and a service for `marble-client`. Once the script completes successfully, it will print out the service end-point as, e.g.,
+
+```
+access marble-client servcice at http://localhost:30194
+```
+
+You can use this end-point to update or query the blockchain ledger. [marble.postman_collection.json](https://github.com/dovetail-lab/fabric-samples/blob/master/marble/marble.postman_collection.json) contains a set of REST messages that you can import to [Postman](https://www.getpostman.com/downloads/) and invoke the `marble_cc` chaincode.
+
+Stop the client service and gateway service after tests complete:
+
+```bash
+cd ../dovetail
+./dovetail.sh stop-app -p org1 -m marble-client.json
+
+cd ../service
+./gateway.sh shutdown -p org1
 ```
 
 ## Build and run Dovetail app in cloud
