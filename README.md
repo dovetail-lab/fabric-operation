@@ -21,7 +21,7 @@ This repo uses only bash scripts, and thus it does not depend on any other scrip
 
 ## Download Dovetail projects and Hyperledger Fabric samples
 
-To get-started for local development, you can set setup the environment as described [here](https://github.com/dovetail-lab/fabric-cli/blob/master/README.md).
+To get-started on local development, you can setup the environment as described [here](https://github.com/dovetail-lab/fabric-cli/blob/master/README.md).
 
 ## Start CA server and generate crypto data
 
