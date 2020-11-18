@@ -44,7 +44,7 @@ This will install and test the sample [marble_cc](./samples/marble) chaincode. R
 
 ### Build and run client service
 
-This step will configure and run a client service, [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
+This step will configure and run a client service, [marble_client.json](./samples/marble_client/marble-client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
 
 First, export the connection info of the Fabric network:
 
@@ -53,7 +53,7 @@ cd ../service
 ./gateway.sh config -t docker -o orderer -p org1 -p org2
 ```
 
-Second, configure the client service app [marble-client](.samples/marble_client) to use the exported network connection info:
+Second, configure the client service app [marble-client](./samples/marble_client) to use the exported network connection info:
 
 ```bash
 cd ../dovetail
@@ -173,7 +173,7 @@ Run the following query should return the full state change history of the `marb
 
 ### Build and run client service in Kubernetes
 
-You can configure and run a client service, [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
+You can configure and run a client service, [marble_client.json](./samples/marble_client/marble-client.json), that makes the `marble_cc` chaincode accessible via REST APIs.
 Use the following script to build and run the client app as a Kubernetes service.
 
 ```bash
