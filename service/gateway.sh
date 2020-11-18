@@ -339,7 +339,7 @@ spec:
     spec:
       containers:
       - name: gateway
-        image: ubuntu:18.04
+        image: golang:1.14.12-alpine3.12
         resources:
           requests:
             memory: ${POD_MEM}

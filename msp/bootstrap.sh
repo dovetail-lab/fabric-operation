@@ -30,7 +30,7 @@ function waitForTool {
   else
     ups=$(kubectl get pod -n ${ORG} | grep 'tool' | grep Running | wc -l)
     local retry=1
-    until [ ${ups} -gt 0 ] || [ ${retry} -gt 20 ]; do
+    until [ ${ups} -gt 0 ] || [ ${retry} -gt 40 ]; do
       sleep 5s
       echo -n "."
       ups=$(kubectl get pod -n ${ORG} | grep 'tool' | grep Running | wc -l)

@@ -68,7 +68,7 @@ Following steps will start and smoke test the default Hyperledger Fabric network
 ### Start CA server and create crypto data for the Fabric network
 
 ```bash
-cd ../ca
+cd ./fabric-operation/ca
 ./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
@@ -153,11 +153,25 @@ Verify the gateway connection by posting following request to `/v1/connection`:
 
 It will return a `connectionId`: `10375918345828239422`.
 
+Verify transaction by sending the following request to `/v1/transaction`:
+
+```bash
+{
+  "connectionId": "10375918345828239422",
+  "type": "QUERY",
+  "chaincodeId": "sacc",
+  "transaction": "get",
+  "parameter": [ "a" ]
+}
+```
+
+It should return a value `100` that was set by the smoke test.
+
 ### Build and start Dovetail chaincode and service
 
-Refer [dovetail](../dovetail/README.md) for more details about [Project Dovetail](https://github.com/dovetail-lab/dovetail), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps.
+Refer [dovetail](../dovetail/README.md) for more details about deploy Fabric applications developed using [Project Dovetail](https://github.com/dovetail-lab/dovetail), which is a visual programming tool for modeling Hyperledger Fabric chaincode and client apps.
 
-A Dovetail chaincode model, e.g., [marble.json](../dovetail/samples/marble/marble.json) is a JSON file that implements a sample chaincode by using the [TIBCO Flogo](https://docs.tibco.com/products/tibco-flogo-enterprise-2-10-0) visual modeler. Use the following script to build and instantiate the chaincode.
+A Dovetail chaincode is JSON file, e.g., [marble.json](../dovetail/samples/marble/marble.json) constructed by using the [TIBCO Flogo](https://docs.tibco.com/products/tibco-flogo-enterprise-2-10-0) visual modeler. Use the following script to build and deploy the chaincode.
 
 ```bash
 # create chaincode package marble_cc_1.0.tar.gz
@@ -168,7 +182,9 @@ cd ../msp
 # install package marble_cc_1.0.tar.gz
 cd ../network
 ./network.sh install-chaincode -p org1 -n peer-0 -f marble_cc_1.0.tar.gz
+./network.sh install-chaincode -p org1 -n peer-1 -f marble_cc_1.0.tar.gz
 ./network.sh install-chaincode -p org2 -n peer-0 -f marble_cc_1.0.tar.gz >&log.txt
+./network.sh install-chaincode -p org2 -n peer-1 -f marble_cc_1.0.tar.gz
 PACKAGE_ID=$(cat log.txt | grep "Chaincode code package identifier:" | sed 's/.*Chaincode code package identifier: //' | tr -d '\r')
 
 # approve installed package: ${packageID}
@@ -185,11 +201,23 @@ You can send test transactions by using the Swagger UI of the gateway service, e
   "type": "INVOKE",
   "chaincodeId": "marble_cc",
   "transaction": "initMarble",
-  "parameter": ["marble1", "blue", "35", "tom"]
+  "parameter": ["marble10", "blue", "35", "tom"]
 }
 ```
 
-By using the same `Flogo` modeling UI, we can also implement a client app, e.g., [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that updates or queries the Fabric distributed ledger by using the `marble` chaincode. Use the following script to build and run a client app as a Kubernetes service.
+Send a query request to verify the data on `mychannel` chain:
+
+```json
+{
+  "connectionId": "10375918345828239422",
+  "type": "QUERY",
+  "chaincodeId": "marble_cc",
+  "transaction": "readMarble",
+  "parameter": [ "marble10" ]
+}
+```
+
+By using the same `Flogo` modeling UI, we can also implement a client service, e.g., [marble_client.json](../dovetail/samples/marble_client/marble_client.json), that allows user to invoke chaincode via REST APIs. Use the following script to build and run the client app as a Kubernetes service.
 
 ```bash
 # generate network config if skipped the previous gateway test
@@ -208,19 +236,39 @@ The above command will start 2 instances of the `marble-client` and expose a `lo
 access marble-client servcice at http://40.91.88.121:7091
 ```
 
-You can use this end-point to update or query the blockchain ledger. [marble.postman_collection.json](https://github.com/dovetail-lab/fabric-samples/blob/master/marble/marble.postman_collection.json) contains a set of REST messages that you can import to [Postman](https://www.getpostman.com/downloads/) and invoke the `marble-client` REST APIs.
+You can use this end-point to update or query the blockchain ledger. [marble.postman_collection.json](https://github.com/dovetail-lab/fabric-samples/blob/master/marble/marble.postman_collection.json) contains a set of REST messages that you can import to [Postman](https://www.getpostman.com/downloads/) and invoke the `marble_cc` chaincode.
 
-Stop the client app after tests complete:
+Stop the client service and gateway service after tests complete:
 
 ```bash
+cd ../dovetail
 ./dovetail.sh stop-app -p org1 -m marble-client.json
+
+cd ../service
+./gateway.sh shutdown -p org1
 ```
 
 ### Stop Fabric network and cleanup persistent data
 
+The sample network uses peers' internal builder to start chaincode containers, which you cannot view or delete by using `kubectl`.  If you need to delete and restart the chaincode containers (without restarting the peer nodes), you can use the `cleanup.sh` script to view and delete the chaincode docker images and running chaincode containers, i.e.,
+
+```bash
+cd ../network
+# list all chaincode containers and images
+./cleanup.sh view
+
+# delete all chaincode containers and images
+./cleanup.sh delete
+```
+
+Stop the Fabric network:
+
 ```bash
 cd ../network
 ./network.sh shutdown -o orderer -p org1 -p org2 -d
+
+cd ../msp
+./msp-util shutdown -p org1
 ```
 
 This command shuts down orderers and peers, and the last argument `-d` means to delete all persistent data as well. If you do not use the argument `-d`, it would keep the test ledger file in the `Azure Files` storage, and so it can be loaded when the network restarts. You can verify the result using the following command.

@@ -65,6 +65,4 @@ git clone https://github.com/dovetail-lab/fabric-cli.git
 go get -u github.com/project-flogo/cli/...
 
 # install fabric binary for chaincode packaging
-curl -sSL http://bit.ly/2ysbOFE | bash -s -- 1.4.9 1.4.9
-cd fabric-samples
-git checkout tags/v1.4.8
+curl -sSL http://bit.ly/2ysbOFE | bash -s -- 2.2.1 1.4.9

@@ -1044,7 +1044,7 @@ function execUtil {
     echo "use docker-compose - ${_cmd}"
     docker exec -it cli.${FABRIC_ORG} bash -c "./${_cmd}"
   else
-    echo "use k8s - ${_cmd}"
+    echo "use ${ENV_TYPE} - ${_cmd}"
     kubectl exec -it cli -n ${ORG} -- bash -c "cd cli && ./${_cmd}"
   fi
 }

@@ -45,7 +45,7 @@ spec:
 
 # cleanup all Fabric chaincode docker containers and images
 function cleanup {
-  local peerNodes=$(kubectl get pods -o=jsonpath='{.items[?(@.metadata.labels.app=="peer")].spec.nodeName}')
+  local peerNodes=$(kubectl get pods --all-namespaces -o=jsonpath='{.items[?(@.metadata.labels.app=="peer")].spec.nodeName}')
   local nodes=(${peerNodes})
   for n in "${nodes[@]}"; do
     echo "on node ${n}"
@@ -61,7 +61,7 @@ function cleanup {
     done
 
     # force remove chaincode containers, i.e. docker rm -f
-    local cid=$(kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker ps -q -f 'label=org.hyperledger.fabric.chaincode.id.name'")
+    local cid=$(kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker ps -q -f 'label=org.hyperledger.fabric.chaincode.type'")
     if [ "${CMD}" == "delete" ]; then
       echo "removing chaincode container ${cid}"
       kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker rm -f ${cid}"
@@ -70,7 +70,7 @@ function cleanup {
       kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker inspect -f '{{.Name}} {{.State.Status}}' ${cid}"
     fi
 
-    local iid=$(kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker images -q -f 'label=org.hyperledger.fabric.chaincode.id.name'")
+    local iid=$(kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker images -q -f 'label=org.hyperledger.fabric.chaincode.type'")
     if [ "${CMD}" == "delete" ]; then
       echo "removing chaincode image ${iid}"
       kubectl -n default exec privileged-pod -- sh -c "chroot /host/ docker rmi -f ${iid}"

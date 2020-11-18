@@ -18,8 +18,18 @@ function testChannel {
 }
 
 function testChaincode {
+  local saccDir=../../hyperledger/fabric-samples/chaincode/sacc
+  if [ ! -d ${saccDir} ]; then
+    saccDir=${HOME}/fabric-samples/chaincode/sacc
+    echo "try to find sacc in ${saccDir}"
+    if [ ! -d ${saccDir} ]; then
+      echo "cannot find fabric sample sacc"
+      exit 1
+    fi
+  fi
+
   # package and install chaincode for org1
-  ./network.sh package-chaincode -t "${ENV_TYPE}" -p org1 -f ../../hyperledger/fabric-samples/chaincode/sacc -s sacc
+  ./network.sh package-chaincode -t "${ENV_TYPE}" -p org1 -f ${saccDir} -s sacc
   #tar tvfz ../org1.example.com/cli/sacc_1.0.tar.gz
   ./network.sh install-chaincode -t "${ENV_TYPE}" -p org1 -n peer-0 -f sacc_1.0.tar.gz >&log.txt
   ./network.sh install-chaincode -t "${ENV_TYPE}" -p org1 -n peer-1 -f sacc_1.0.tar.gz
@@ -29,7 +39,7 @@ function testChaincode {
   local packageID=$(cat log.txt | grep "Chaincode code package identifier:" | sed 's/.*Chaincode code package identifier: //' | tr -d '\r')
 
   # package and install chaincode for org2
-  ./network.sh package-chaincode -t "${ENV_TYPE}" -p org2 -f ../../hyperledger/fabric-samples/chaincode/sacc -s sacc
+  ./network.sh package-chaincode -t "${ENV_TYPE}" -p org2 -f ${saccDir} -s sacc
   ./network.sh install-chaincode -t "${ENV_TYPE}" -p org2 -n peer-0 -f sacc_1.0.tar.gz
   ./network.sh install-chaincode -t "${ENV_TYPE}" -p org2 -n peer-1 -f sacc_1.0.tar.gz
 
