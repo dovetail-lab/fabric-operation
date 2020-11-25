@@ -1,8 +1,6 @@
 # Network operations
 
-TODO: update required for this doc
-
-After a bootstrap Fabric network is started, you can use the following scripts to deploy your application and scale.
+After a bootstrap Fabric network is started, you can use the following scripts to deploy your application and scale up orderers and peers.
 
 ## Create new channel
 
@@ -40,7 +38,7 @@ cd ../network
 
 This makes 4 peers of 2 organizations to join the channel `newchannel`. The optional argument `-a` means to update the anchor peer for an organization, which can be used only once for each organization.
 
-## Install and instantiate new chaincode
+## Install, approve and commit new chaincode
 
 To install new chaincode, e.g., the Fabric sample [marbles02](https://github.com/hyperledger/fabric-samples/tree/master/chaincode/marbles02/go), you can use the following scripts to package and install it.
 
@@ -82,7 +80,7 @@ sleep 5
 ./network.sh query-chaincode -t docker -p org1 -n peer-0 -c "newchannel" -s marbles -m '{"Args":["readMarble","marble1"]}'
 ```
 
-## Add new peer nodes of the same bootstrap org
+## Add new peer nodes of a bootstrap peer org
 
 You can scale up the number of peers of a running network only if Kubernetes is used. Use the following script to create crypto keys for the additional peer nodes:
 
@@ -104,9 +102,9 @@ cd ../network
 ./network.sh scale-peer -p org1 -r 4
 ```
 
-## Add new orderer nodes of the same bootstrap org
+## Add new orderer nodes of the bootstrap orderer org
 
-When RAFT consensus is used, you can add more orderer nodes to the network. However, as of Fabric release 1.4, it allows you to add only one new consenter at a time. The following script will update the system channel, and add one more orderer node of the same bootstrap orderer org to the network.
+When RAFT consensus is used, you can add more orderer nodes to the network. However, since Fabric release 1.4, it allows you to add only one new consenter at a time. The following script will update the system channel, and add one more orderer node of the bootstrap orderer org to the network.
 
 ```bash
 # 1. generate crypto for new orderer nodes (assuming 3 orderers already running, i.e., orderer-0, 1, and 2)
