@@ -50,14 +50,14 @@ Usage:
         e.g., network.sh query-chaincode -p org1 -n peer-0 -c mychannel -s mycc -m '{"Args":["query","a"]}'
       - 'invoke-chaincode' - invoke chaincode from a peer, with arguments: -c <channel> -s <name> -m <args>
         e.g., network.sh invoke-chaincode -p org1 -p org2 -c mychannel -s mycc -m '{"Args":["invoke","a","b","10"]}'
-      - 'add-org-tx' - generate update tx for add new msp to a channel, with arguments: -o <msp> -c <channel>
-        e.g., network.sh add-org-tx -o peerorg1MSP -c mychannel
-      - 'add-orderer-tx' - generate update tx for add new orderers to a channel (default system-channel) for RAFT consensus, with argument: -f <consenter-file> [-c <channel>]
-        e.g., network.sh add-orderer-tx -f ordererConfig-3.json
+      - 'add-org-tx' - generate update tx for add new org to a channel, with arguments: -i <new-org> -c <channel>
+        e.g., network.sh add-org-tx -p org1 -i org3 -c mychannel
+      - 'add-orderer' - update sys-channel to add one more orderer node for RAFT consensus, with argument: -q <next orderer seq> [-c <sys-channel>]
+        e.g., network.sh add-orderer-tx -o orderer -q 3
       - 'sign-transaction' - sign a config update transaction file in the CLI working directory, with argument = -f <tx-file>
-        e.g., network.sh sign-transaction -f "mychannel-peerorg1MSP.pb"
-      - 'update-channel' - send transaction to update a channel, with arguments ('-a' means orderer user): -f <tx-file> -c <channel> [-a]
-        e.g., network.sh update-channel -f "mychannel-peerorg1MSP.pb" -c mychannel
+        e.g., network.sh sign-transaction -p org1 -f "mychannel-org3MSP.pb"
+      - 'update-channel' - send transaction to update a channel, with arguments: -f <tx-file> -c <channel>
+        e.g., network.sh update-channel -p org2 -f "mychannel-org3MSP.pb" -c mychannel
     -o <orderer-org> - the .env file in config folder that defines orderer org, e.g., orderer (default)
     -p <peer-orgs> - the .env file in config folder that defines peer org, e.g., org1
     -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', or 'az'
@@ -71,12 +71,26 @@ Usage:
     -v <cc version> - chaincode version, default 1.0
     -g <cc language> - chaincode language, default 'golang'
     -k <cc package id> - chaincode package id
-    -q <cc approve seq> - sequence for chaincode approval, default 1
+    -q <seq number> - sequence for chaincode approval or additional orderer, default 1
     -e <policy> - endorsement policy for instantiate/upgrade chaincode, e.g., "OR ('Org1MSP.peer')"
     -m <args> - args for chaincode commands
-    -i <org msp> - org msp to be added to a channel
+    -i <new-org> - new org to be added to a channel
   network.sh -h (print this message)
   Example:
     ./network.sh start -t docker -o orderer -p org1 -p org2
     ./network.sh shutdown -t docker -o orderer -p org1 -p org2 -d
+```
+
+## Cleanup chaincode containers in Kubernetes
+
+When chaincode containers are launched by peer nodes, they are not directly visible in Kubernetes. The old "hidden" chaincode docker images and containers may lead to unexpected results, especially when you want to re-install and run a chaincode. The `cleanup.sh` script uses a `privileged POD` to view or delete such "hidden" chaincode images and containers when Kubernetes is used.
+
+```bash
+cd ./network
+
+# list all hidden chaincode containers and images
+./cleanup.sh view
+
+# delete all hidden chaincode containers and images
+./cleanup.sh delete
 ```

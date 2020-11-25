@@ -63,7 +63,6 @@ function printOrdererMSP {
 # printPeerMSP org1
 function printPeerMSP {
   source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${1} ${ENV_TYPE}
-  PEER_MSPS+=(${ORG_MSP})
 
   echo "
     - &${ORG_MSP}
@@ -465,29 +464,6 @@ function shutdownService {
   fi
 }
 
-# checkOrdererCrypto <start-seq> <end-seq>
-function checkOrdererCrypto {
-  if [ "${ENV_TYPE}" == "docker" ]; then
-    echo "Error: not supported for docker"
-    return 1
-  fi
-  local seq=${1:-"0"}
-  local max=${2:-"0"}
-  if [ "${max}" -le "${seq}" ]; then
-    echo "Error: invalid orderer seq [${seq}, ${max})"
-    return 3
-  fi
-  until [ "${seq}" -ge "${max}" ]; do
-    local orderer="orderer-${seq}"
-    seq=$((${seq}+1))
-    local o_cert=${DATA_ROOT}/tool/crypto/orderers/${orderer}/tls/server.crt
-    if [ ! -f "${o_cert}" ]; then
-      echo "Error; orderer cert does not exist: ${o_cert}"
-      return 4
-    fi
-  done
-}
-
 function execCommand {
   local _cmd="gen-artifact.sh $@"
   echo "execute command ${_cmd}"
@@ -586,17 +562,14 @@ function printHelp() {
   echo "      - 'shutdown' - shutdown tools container for the msp-util"
   echo "      - 'bootstrap' - generate bootstrap genesis block and test channel tx defined in network spec"
   echo "      - 'genesis' - generate genesis block of etcd raft consensus"
-  echo "      - 'channel' - generate channel creation tx for specified channel name, with argument '-c <channel name>'"
-  echo "      - 'mspconfig' - print MSP config json for adding to a network, output in '${DATA_ROOT}/tool'"
-  echo "      - 'orderer-config' - print orderer RAFT consenter config for adding to a network, with arguments -s <start-seq> [-e <end-seq>]"
+  echo "      - 'channel' - generate channel creation tx for specified channel name, with argument '-c <channel name> -p <peer-org>'"
+  echo "      - 'new-org' - create artifacts for a new peer org to be added to the network"
   echo "      - 'build-cds' - build chaincode cds package from flogo model, with arguments -m <model-json> [-v <version>]"
   echo "      - 'build-app' - build linux executable from flogo model, with arguments -m <model-json> -g <go-os>"
   echo "    -o <orderer-org> - the .env file in config folder that defines the orderer org, e.g., orderer (default)"
   echo "    -p <peer-org> - the .env file in config folder that defines a peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', 'az', or 'gcp'"
   echo "    -c <channel name> - name of a channel, used with the 'channel' command"
-  echo "    -s <start seq> - start sequence number (inclusive) for orderer config"
-  echo "    -e <end seq> - end sequence number (exclusive) for orderer config"
   echo "    -m <model json> - Flogo model json file"
   echo "    -g <go-os> - target os, e.g., linux (default) or darwin"
   echo "    -v <cc version> - version of chaincode"
@@ -615,7 +588,7 @@ CMD=${1}
 if [ "${CMD}" != "-h" ]; then
   shift
 fi
-while getopts "h?o:p:t:c:s:e:m:g:v:" opt; do
+while getopts "h?o:p:t:c:m:g:v:" opt; do
   case "$opt" in
   h | \?)
     printHelp
@@ -632,12 +605,6 @@ while getopts "h?o:p:t:c:s:e:m:g:v:" opt; do
     ;;
   c)
     CHAN_NAME=$OPTARG
-    ;;
-  s)
-    START_SEQ=$OPTARG
-    ;;
-  e)
-    END_SEQ=$OPTARG
     ;;
   m)
     MODEL=$OPTARG
@@ -687,36 +654,51 @@ bootstrap)
   execCommand "bootstrap ${PEER_MSPS[@]}"
   ;;
 channel)
-  echo "create channel tx for channel: [ ${CHAN_NAME} ]"
+  echo "create channel tx for channel: [ ${CHAN_NAME} ${PEER_ENVS[@]} ]"
   if [ -z "${CHAN_NAME}" ]; then
     echo "Error: channel name not specified"
     printHelp
   else
-    execCommand "channel ${CHAN_NAME}"
+    for p in "${PEER_ENVS[@]}"; do
+      source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${p} ${ENV_TYPE}
+      PEER_MSPS+=(${ORG_MSP})
+    done
+    source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+    execCommand "channel ${CHAN_NAME} ${PEER_MSPS[@]}"
   fi
   ;;
-mspconfig)
-  echo "print peer MSP config '${ORG_MSP}.json'"
-  execCommand mspconfig
+new-org)
+  echo "create new peer org artifacts: ${ORDERER_ENV} ${PEER_ENVS[@]} ${ENV_TYPE}"
+  if [ -z ${ORDERER_ENV} ]; then
+    echo "orderer org must be specified"
+    printHelp
+    exit 1
+  fi
+  if [ ${#PEER_ENVS[@]} -eq 0 ]; then
+    echo "Must specify a peer org to create"
+    printHelp
+    exit 1
+  fi
+
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${PEER_ENVS[0]} ${ENV_TYPE}
+  PEER_MSPS+=(${ORG_MSP})
+  ANCHOR="peer-0.${FABRIC_ORG}"
+  if [ ! -z "${SVC_DOMAIN}" ]; then
+    ANCHOR="peer-0.peer.${SVC_DOMAIN}"
+  fi
+
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${ORDERER_ENV} ${ENV_TYPE}
+  echo "create ${DATA_ROOT}/tool/configtx.yaml"
+  if [ -f ${DATA_ROOT}/tool/configtx.yaml ]; then
+    ${sucp} ${DATA_ROOT}/tool/configtx.yaml ${DATA_ROOT}/tool/configtx_orig.yaml
+  fi
+  printConfigTx | ${stee} ${DATA_ROOT}/tool/configtx.yaml > /dev/null
+
+  execCommand "new-org ${PEER_MSPS[0]} ${ANCHOR}"
   ;;
 genesis)
   echo "create genesis block for etcd raft consensus"
   execCommand genesis
-  ;;
-orderer-config)
-  echo "print orderer RAFT consenter config [ ${START_SEQ} ${END_SEQ}]"
-  if [ -z "${START_SEQ}" ]; then
-    echo "Error: start-seq must be specified"
-    printHelp
-    exit 1
-  fi
-  if [ -z "${END_SEQ}" ]; then
-    END_SEQ=$((${START_SEQ}+1))
-  fi
-  checkOrdererCrypto ${START_SEQ} ${END_SEQ}
-  if [ "$?" -eq 0 ]; then
-    execCommand "orderer-config ${START_SEQ} ${END_SEQ}"
-  fi
   ;;
 build-cds)
   echo "build chaincode package: ${MODEL} ${VERSION}"

@@ -32,12 +32,8 @@ function createChannelTx {
   fi
 }
 
+# anchorConfig <anchorPeer>
 function anchorConfig {
-  local anchor="peer-0.${FABRIC_ORG}"
-  if [ ! -z "${SVC_DOMAIN}" ]; then
-    anchor="peer-0.peer.${SVC_DOMAIN}"
-  fi
-
   echo "{
 	\"values\": {
     \"AnchorPeers\": {
@@ -45,7 +41,7 @@ function anchorConfig {
       \"value\": {
         \"anchor_peers\": [
           {
-            \"host\": \"${anchor}\",
+            \"host\": \"${1}\",
             \"port\": 7051
           }
         ]
@@ -56,60 +52,15 @@ function anchorConfig {
 }"
 }
 
-function createPeerMspConfig {
-  configtxgen -printOrg ${ORG_MSP} > mspConfig.json
-  anchorConfig > anchorConfig.json
-  jq -s '.[0] * .[1]' mspConfig.json anchorConfig.json > ${ORG_MSP}.json
-  echo "created peer MSP config file: ${ORG_MSP}.json"
-}
+# createOrg <orgMSP> <anchorPeer>
+function createOrg {
+  # create channel artifacts for test-channel
+  createChannelTx ${TEST_CHANNEL} ${1}
 
-# printOrdererConfig <start-seq> <end-seq>
-function printOrdererConfig {
-  echo "{
-  \"consenters\": ["
-
-  local seq=${1:-"0"}
-  local max=${2:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    local orderer="orderer-${seq}"
-    seq=$((${seq}+1))
-    echo "    {"
-    printConcenterConfig ${orderer}
-    if [ "${seq}" -eq "${max}" ]; then
-      echo "    }"
-    else
-      echo "    },"
-    fi
-  done
-  echo "  ],
-  \"addresses\": ["
-  local seq=${1:-"0"}
-  local max=${2:-"0"}
-  until [ "${seq}" -ge "${max}" ]; do
-    local orderer="orderer-${seq}"
-    seq=$((${seq}+1))
-    if [ "${seq}" -eq "${max}" ]; then
-      echo "    \"${orderer}.orderer.${SVC_DOMAIN}:7050\""
-    else
-      echo "    \"${orderer}.orderer.${SVC_DOMAIN}:7050\","
-    fi
-  done
-  echo "  ]
-}"
-}
-
-# printConcenterConfig <orderer>
-function printConcenterConfig {
-  local o_cert=./crypto/orderers/${1}/tls/server.crt
-  if [ ! -f "${o_cert}" ]; then
-    return 1
-  else
-    local crt=$(cat ${o_cert} | base64 -w 0)
-    echo "      \"client_tls_cert\": \"${crt}\",
-      \"host\": \"${1}.orderer.${SVC_DOMAIN}\",
-      \"port\": 7050,
-      \"server_tls_cert\": \"${crt}\""
-  fi
+  configtxgen -printOrg ${1} > mspConfig.json
+  anchorConfig ${2} > anchorConfig.json
+  jq -s '.[0] * .[1]' mspConfig.json anchorConfig.json > ${1}.json
+  echo "created peer MSP config file: ${1}.json"
 }
 
 # Print the usage message
@@ -119,9 +70,8 @@ function printUsage {
   echo "    <cmd> - one of 'bootstrap', 'genesis', or 'channel'"
   echo "      - 'bootstrap' (default) - generate genesis block and test-channel tx as specified by container env"
   echo "      - 'mspconfig' - print peer MSP config json for adding to a network"
-  echo "      - 'orderer-config' - print orderer RAFT consenter config, <args> = <start-seq> [<end-seq>]"
   echo "      - 'genesis' - generate genesis block for specified orderer type, <args> = <orderer type>"
-  echo "      - 'channel' - generate tx for create and anchor of a channel, <args> = <channel name>"
+  echo "      - 'channel' - generate tx for create and anchor of a channel, <args> = <channel name> [<peer orgs>]"
 }
 
 CMD=${1:-"bootstrap"}
@@ -133,14 +83,9 @@ bootstrap)
   echo "bootstrap orderer genesis block and tx for test channel ${TEST_CHANNEL}"
   bootstrap ${ARGS}
   ;;
-mspconfig)
-  echo "print peer MSP config '${ORG_MSP}.json' used to add it to a network"
-  createPeerMspConfig
-  ;;
-orderer-config)
-  echo "print orderer RAFT consenter config [${1}, ${2}), used to add it to a network"
-  printOrdererConfig ${ARGS} > ordererConfig-${1}.json
-  echo "created RAFT consenter config: ordererConfig-${1}.json"
+new-org)
+  echo "create artifacts of a new peer org to be added to the network - ${ARGS}"
+  createOrg ${ARGS}
   ;;
 genesis)
   echo "create genesis block for etcd raft consensus"
@@ -152,7 +97,7 @@ channel)
     printUsage
     exit 1
   else
-    echo "create tx for test channel [ ${ARGS} ]"
+    echo "create tx for channel [ ${ARGS} ]"
     createChannelTx ${ARGS}
   fi
   ;;

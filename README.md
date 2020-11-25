@@ -99,17 +99,15 @@ The scripts are designed to support deploymment of Dovetail applications for Hyp
 
 ## More operations for managing Fabric network
 
-TODO: update required here ...
-
-The above bootstrap network is for a single operating company to start a Fabric network with its own orderer and peer nodes of pre-configured size. A network in production will need to scale up and let more organizations join and co-operate. Organizations may create their own Kubernetes networks using the same or different cloud service providers. We provide scripts to support such network activities.
+The above bootstrap network contains 1 orderer and 2 peer organizations that are pre-configured to run 3 orderer and 4 peer nodes. A network in production will need to scale up and let more organizations join and co-operate. Organizations may create their own Kubernetes networks using the same or different cloud service providers. We provide scripts to support such network activities.
 
 The currently supported operations include
 
 - Create and join new channel;
 - Install and instantiate new chaincode;
-- Add new peer nodes of the same bootstrap org;
-- Add new orderer nodes of the same bootstrap org;
-- Add new peer org to the same Kubernetes cluster;
+- Add new peer nodes of a bootstrap peer org;
+- Add new orderer nodes of the bootstrap orderer org;
+- Add new peer org and peer nodes to the same Kubernetes cluster;
 
 Refer [operations](./operations.md) for description of these activities. More operations (as described in `TODO` bellow) will be supported in the future.
 

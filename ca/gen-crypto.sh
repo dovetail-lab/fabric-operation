@@ -422,24 +422,26 @@ function copyNodeCrypto {
     cp ${f} ${_target}/tls/${3}.key
   done
 
-  # copy orderer tls cert to tool crypto
+  # copy orderer tls cert to tool and cli crypto
   if [ "${2}" == "orderers" ]; then
     mkdir -p ${DATA_ROOT}/tool/crypto/orderers/${1}/tls
     cp ${_src}/tls/signcerts/cert.pem ${DATA_ROOT}/tool/crypto/orderers/${1}/tls/server.crt
-  fi
+    mkdir -p ${DATA_ROOT}/cli/crypto/orderers/${1}/tls
+    cp ${_src}/tls/signcerts/cert.pem ${DATA_ROOT}/cli/crypto/orderers/${1}/tls/server.crt
+   fi
 
   # copy peer tls key and cert to cli crypto
   if [ "${2}" == "peers" ]; then
-    mkdir -p ${DATA_ROOT}/cli/crypto/${1}
-    cp -R ${_target}/tls ${DATA_ROOT}/cli/crypto/${1}
+    mkdir -p ${DATA_ROOT}/cli/crypto/peers/${1}
+    cp -R ${_target}/tls ${DATA_ROOT}/cli/crypto/peers/${1}
   fi
 
   # copy user msp to cli and gateway crypto
   if [ "${2}" == "users" ]; then
     if [ "${3}" == "server" ]; then
       # copy admin user msp to cli crypto
-      mkdir -p ${DATA_ROOT}/cli/crypto/${_name}
-      cp -R ${_target}/msp ${DATA_ROOT}/cli/crypto/${_name}
+      mkdir -p ${DATA_ROOT}/cli/crypto/users/${_name}
+      cp -R ${_target}/msp ${DATA_ROOT}/cli/crypto/users/${_name}
     fi
 
     # copy all user msp to gateway crypto

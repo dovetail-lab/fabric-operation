@@ -33,14 +33,16 @@ Usage:
 
 ## Bootstrap crypto of all nodes and users
 
-Example:
+You can bootstrap all crypto data for a pre-defined Fabric network as follows:
 
 ```bash
 cd ./ca
-./ca-crypto.sh bootstrap -p orderer -t k8s
+./bootstrap.sh -o orderer -p org1 -p org2 -d
 ```
 
-This uses the `ca-client` container to generate crypto data for all peers, orderers, and users specified by the network specification file [orderer.env](../config/orderer.env). The result is stored in the folder `orderer.example.com`, which is configured in the `.env` file. The following command prints out other options:
+This starts docker containers in Kubernetes of the `Docker Desktop` on Mac, generate all crypto data for orderers, peers and users preconfigured in the org config files, [orderer.env](../config/orderer.env), [org1.env](../config/org1.env), and [org2.env](../config/org2.env).  The generated artifacts are stored separately for each organization, e.g., data of the `orderer` organization is stored in folder `orderer.example.com`.
+
+The `bootstrap` calls the script `ca-crypto.sh`, which supports the following command options:
 
 ```bash
 ./ca-crypto.sh -h
@@ -61,7 +63,7 @@ Usage:
   ca-crypto.sh -h (print this message)
 ```
 
-When this command is used on `AWS` or `Azure`, the generated crypto data will be stored in a cloud file system mounted on the `bastion` host, e.g., a mounted folder `/mnt/share/netop1.com` in an `EFS` file system on `AWS` or an `Azure Files` storage on `Azure`.
+When this command is used on `AWS` or `Azure`, the generated crypto data will be stored in a cloud file system mounted on the `bastion` host, e.g., a mounted folder `/mnt/share/orderer.example.com` in an `EFS` file system on `AWS` or an `Azure Files` storage on `Azure`.
 
 ## Add crypto of new orderer nodes
 

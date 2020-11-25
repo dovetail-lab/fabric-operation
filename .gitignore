@@ -8,5 +8,6 @@ netop1.com/
 orderer.example.com/
 org1.example.com/
 org2.example.com/
+org3.example.com/
 **/go.sum
 **/log.txt

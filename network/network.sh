@@ -190,6 +190,10 @@ function printCouchdbService {
 function printCliService {
   local admin=${ADMIN_USER:-"Admin"}
   local cn=cli.${FABRIC_ORG}
+  local ord_ca="/etc/hyperledger/cli/crypto/${ORDERER_ORG}/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
+  if [ "${ORDERER_ORG}" == "${FABRIC_ORG}" ]; then
+    ord_ca="/etc/hyperledger/cli/crypto/users/${admin}@${FABRIC_ORG}/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
+  fi
 
   echo "
   ${cn}:
@@ -206,28 +210,36 @@ function printCliService {
       - SYS_CHANNEL=${SYS_CHANNEL}
       - TEST_CHANNEL=${TEST_CHANNEL}
       - CORE_PEER_ID=${cn}
-      - CORE_PEER_ADDRESS=peer-0.${FABRIC_ORG}:7051
       - CORE_PEER_LOCALMSPID=${ORG_MSP}
       - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/cli/crypto/peer-0/tls/server.crt
-      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/cli/crypto/peer-0/tls/server.key
-      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/cli/crypto/peer-0/tls/ca.crt
-      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/cli/crypto/${admin}@${FABRIC_ORG}/msp
-      - ORDERER_CA=/etc/hyperledger/cli/crypto/${ORDERER_ORG}/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem
-      - ORDERER_URL=orderer-0.${ORDERER_ORG}:7050
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/cli/crypto/users/${admin}@${FABRIC_ORG}/msp
       - FABRIC_ORG=${FABRIC_ORG}
-    working_dir: /etc/hyperledger/cli
+      - ORDERER_URL=orderer-0.${ORDERER_ORG}:7050
+      - ORDERER_CA=${ord_ca}"
+  if [ "${ORDERER_ORG}" == "${FABRIC_ORG}" ]; then
+    echo "      - CORE_PEER_ADDRESS=orderer-0.${FABRIC_ORG}:7050
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/cli/crypto/orderers/orderer-0/tls/server.crt
+      - CORE_PEER_TLS_ROOTCERT_FILE=${ord_ca}"
+  else
+    echo "      - CORE_PEER_ADDRESS=peer-0.${FABRIC_ORG}:7051
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/cli/crypto/peers/peer-0/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/cli/crypto/peers/peer-0/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/cli/crypto/peers/peer-0/tls/ca.crt"
+  fi
+  echo "    working_dir: /etc/hyperledger/cli
     command: /bin/bash
     volumes:
       - /var/run/:/host/var/run/
       - ${DATA_ROOT}/cli/:/etc/hyperledger/cli/
       - ${DATA_ROOT}/cli/chaincode/:/opt/gopath/src/github.com/chaincode:cached
     networks:
-      - ${NETWORK}
-    depends_on:"
-  for p in "${PEERS[@]}"; do
-    echo "      - ${p}.${FABRIC_ORG}"
-  done
+      - ${NETWORK}"
+  if [ "${ORDERER_ORG}" != "${FABRIC_ORG}" ]; then
+    echo "    depends_on:"
+    for p in "${PEERS[@]}"; do
+      echo "      - ${p}.${FABRIC_ORG}"
+    done
+  fi
 }
 
 # print orderer docker yaml, assuming that env is already set for ORDERER_ENV
@@ -254,6 +266,9 @@ services:"
     printOrdererService ${seq}
     seq=$((${seq}+1))
   done
+
+  # print cli service for executing admin commands
+  printCliService
 
   # print named volumes
   if [ "${#VOLUMES[@]}" -gt "0" ]; then
@@ -719,7 +734,8 @@ spec:
           storage: ${NODE_PV_SIZE}"
 }
 
-# printCliYaml <test-peer>
+# printCliYaml [<test-peer>]
+# if test-peer is not provided, create cli for orderer org w/o peer info
 # e.g., printCliYaml peer-0
 function printCliYaml {
   local admin=${ADMIN_USER:-"Admin"}
@@ -727,7 +743,9 @@ function printCliYaml {
   local ord_ca="/etc/hyperledger/cli/crypto/${ORDERER_ORG}/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
   local ord_url="orderer-0.orderer.${SVC_DOMAIN/${ORG}./${o_org}.}:7050"
   local ord_msp="${ORDERER_ORG%%.*}MSP"
-
+  if [ -z "${1}" ]; then
+    ord_ca="/etc/hyperledger/cli/crypto/users/${admin}@${FABRIC_ORG}/msp/tlscacerts/tlsca.${ORDERER_ORG}-cert.pem"
+  fi
   echo "
 apiVersion: v1
 kind: Pod
@@ -750,23 +768,32 @@ spec:
       mkdir -p /opt/gopath/src/github.com
       while true; do sleep 30; done
     env:
-    - name: CORE_PEER_ADDRESS
-      value: ${1}.peer.${SVC_DOMAIN}:7051
     - name: CORE_PEER_ID
       value: cli
     - name: CORE_PEER_LOCALMSPID
       value: ${ORG_MSP}
     - name: CORE_PEER_MSPCONFIGPATH
-      value: /etc/hyperledger/cli/crypto/${admin}@${FABRIC_ORG}/msp
-    - name: CORE_PEER_TLS_CERT_FILE
-      value: /etc/hyperledger/cli/crypto/${1}/tls/server.crt
+      value: /etc/hyperledger/cli/crypto/users/${admin}@${FABRIC_ORG}/msp
     - name: CORE_PEER_TLS_ENABLED
-      value: \"true\"
-    - name: CORE_PEER_TLS_KEY_FILE
-      value: /etc/hyperledger/cli/crypto/${1}/tls/server.key
+      value: \"true\""
+  if [ -z "${1}" ]; then
+    echo "    - name: CORE_PEER_ADDRESS
+      value: orderer-0.orderer.${SVC_DOMAIN}:7050
+    - name: CORE_PEER_TLS_CERT_FILE
+      value: /etc/hyperledger/cli/crypto/orderers/orderer-0/tls/server.crt
     - name: CORE_PEER_TLS_ROOTCERT_FILE
-      value: /etc/hyperledger/cli/crypto/${1}/tls/ca.crt
-    - name: CORE_VM_ENDPOINT
+      value: ${ord_ca}"
+  else
+    echo "    - name: CORE_PEER_ADDRESS
+      value: ${1}.peer.${SVC_DOMAIN}:7051
+    - name: CORE_PEER_TLS_CERT_FILE
+      value: /etc/hyperledger/cli/crypto/peers/${1}/tls/server.crt
+    - name: CORE_PEER_TLS_KEY_FILE
+      value: /etc/hyperledger/cli/crypto/peers/${1}/tls/server.key
+    - name: CORE_PEER_TLS_ROOTCERT_FILE
+      value: /etc/hyperledger/cli/crypto/peers/${1}/tls/ca.crt"
+  fi
+  echo "    - name: CORE_VM_ENDPOINT
       value: unix:///host/var/run/docker.sock
     - name: FABRIC_LOGGING_SPEC
       value: INFO
@@ -883,7 +910,7 @@ function scaleOrderer {
     return 2
   fi
   ${sumd} -p ${DATA_ROOT}/orderers/${ord}/data
-  ${sucp} ${DATA_ROOT}/tool/${ORDERER_TYPE}-genesis.block ${DATA_ROOT}/orderers/${ord}/genesis.block
+  ${sucp} ${DATA_ROOT}/tool/orderer-genesis.block ${DATA_ROOT}/orderers/${ord}/genesis.block
 
   echo "create persistent volume for ${ord}"
   printDataPV ${ord} "${ORG}-orderer-data-class" | ${stee} ${DATA_ROOT}/network/k8s/orderer-pv-${rep}.yaml > /dev/null
@@ -908,6 +935,7 @@ function startDockerNetwork {
   getOrderers
   printOrdererDockerYaml > ${docker_root}/${ORDERER_ENV}-docker.yaml
   local containers="-f ${docker_root}/${ORDERER_ENV}-docker.yaml"
+  cp ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
 
   for p in "${PEER_ENVS[@]}"; do
     source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${p} ${ENV_TYPE}
@@ -957,38 +985,54 @@ function startK8sNetwork {
   local k8s_root=${DATA_ROOT}/network/k8s
   ${sumd} -p ${k8s_root}
 
-  getOrderers
-  printOrdererStorageYaml | ${stee} ${k8s_root}/${ORDERER_ENV}-pv.yaml > /dev/null
-  printOrdererYaml | ${stee} ${k8s_root}/${ORDERER_ENV}.yaml > /dev/null
+  local running=$(kubectl get pods -l "app==orderer" -n ${ORG} | grep orderer | wc -l)
+  if [ ${running} -gt 0 ]; then
+    echo "${running} orderers are already running"
+  else
+    getOrderers
+    printOrdererStorageYaml | ${stee} ${k8s_root}/${ORDERER_ENV}-pv.yaml > /dev/null
+    printOrdererYaml | ${stee} ${k8s_root}/${ORDERER_ENV}.yaml > /dev/null
+    printCliStorageYaml | ${stee} ${k8s_root}/${ORDERER_ENV}-cli-pv.yaml > /dev/null
+    printCliYaml | ${stee} ${k8s_root}/${ORDERER_ENV}-cli.yaml > /dev/null
+    ${sucp} ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
+    
+    # start orderer processes
+    kubectl create -f ${k8s_root}/${ORDERER_ENV}-pv.yaml
+    kubectl create -f ${k8s_root}/${ORDERER_ENV}.yaml
+    kubectl create -f ${k8s_root}/${ORDERER_ENV}-cli-pv.yaml
+    kubectl create -f ${k8s_root}/${ORDERER_ENV}-cli.yaml
+  fi
 
   for po in "${PEER_ENVS[@]}"; do
     source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${po} ${ENV_TYPE}
-    getPeers
-    printPeerStorageYaml | ${stee} ${k8s_root}/${po}-peer-pv.yaml > /dev/null
-    printPeerYaml | ${stee} ${k8s_root}/${po}-peer.yaml > /dev/null
-    printCliStorageYaml | ${stee} ${k8s_root}/${po}-cli-pv.yaml > /dev/null
-    printCliYaml peer-0 | ${stee} ${k8s_root}/${po}-cli.yaml > /dev/null
+    running=$(kubectl get pods -l "app==peer" -n ${ORG} | grep peer | wc -l)
+    if [ ${running} -gt 0 ]; then
+      echo "${running} peers are already running"
+    else
+      getPeers
+      printPeerStorageYaml | ${stee} ${k8s_root}/${po}-peer-pv.yaml > /dev/null
+      printPeerYaml | ${stee} ${k8s_root}/${po}-peer.yaml > /dev/null
+      printCliStorageYaml | ${stee} ${k8s_root}/${po}-cli-pv.yaml > /dev/null
+      printCliYaml peer-0 | ${stee} ${k8s_root}/${po}-cli.yaml > /dev/null
 
-    # prepare folder for chaincode testing
-    ${sumd} -p ${DATA_ROOT}/cli/chaincode
-    ${sucp} ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
-  done
+      # prepare folder for chaincode testing
+      ${sumd} -p ${DATA_ROOT}/cli/chaincode
+      ${sucp} ${SCRIPT_DIR}/network-util.sh ${DATA_ROOT}/cli
 
-  # start network
-  kubectl create -f ${k8s_root}/${ORDERER_ENV}-pv.yaml
-  kubectl create -f ${k8s_root}/${ORDERER_ENV}.yaml
-
-  for po in "${PEER_ENVS[@]}"; do
-    kubectl create -f ${k8s_root}/${po}-peer-pv.yaml
-    kubectl create -f ${k8s_root}/${po}-cli-pv.yaml
-    kubectl create -f ${k8s_root}/${po}-peer.yaml
-    kubectl create -f ${k8s_root}/${po}-cli.yaml
+      # start peer processes
+      kubectl create -f ${k8s_root}/${po}-peer-pv.yaml
+      kubectl create -f ${k8s_root}/${po}-cli-pv.yaml
+      kubectl create -f ${k8s_root}/${po}-peer.yaml
+      kubectl create -f ${k8s_root}/${po}-cli.yaml
+    fi
   done
 }
 
 function shutdownK8sNetwork {
   local k8s_root=${DATA_ROOT}/network/k8s
   echo "stop cli pod ..."
+  kubectl delete -f ${k8s_root}/${ORDERER_ENV}-cli.yaml
+  kubectl delete -f ${k8s_root}/${ORDERER_ENV}-cli-pv.yaml
   for po in "${PEER_ENVS[@]}"; do
     kubectl delete -f ${k8s_root}/${po}-cli.yaml
     kubectl delete -f ${k8s_root}/${po}-cli-pv.yaml
@@ -1212,7 +1256,7 @@ function approveChaincode {
 
   source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${1} ${ENV_TYPE}
   local version=${CC_VERSION:-"1.0"}
-  local seq=${CC_SEQ:-"1"}
+  local seq=${SEQN:-"1"}
 
   # call cli to approve chaincode
   execUtil "${CMD} ${CHANNEL_ID} ${CC_PACKAGE} ${CC_NAME} ${version} ${seq} \"${CC_SRC}\" \"${POLICY}\""
@@ -1251,17 +1295,15 @@ function commitChaincode {
       # set working org
       firstOrg=${FABRIC_ORG}
       cliRoot=${DATA_ROOT}/cli
-      peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peer-0/tls/ca.crt"
+      peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peers/peer-0/tls/ca.crt"
     else
-      # mkdir -p ${cliRoot}/crypto/${org}/tls
-      # ${sucp} ${DATA_ROOT}/cli/crypto/peer-0/tls/ca.crt ${cliRoot}/crypto/${org}/tls
       peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${FABRIC_ORG}/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
     fi
   done
   FABRIC_ORG=${firstOrg}
   ORG=${FABRIC_ORG%%.*}
   local version=${CC_VERSION:-"1.0"}
-  local seq=${CC_SEQ:-"1"}
+  local seq=${SEQN:-"1"}
 
   # call cli to commit chaincode
   echo "commit chaincode to orgs $@ using params: ${peerParams}"
@@ -1314,7 +1356,7 @@ function invokeChaincode {
       # set working org
       firstOrg=${FABRIC_ORG}
       cliRoot=${DATA_ROOT}/cli
-      peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peer-0/tls/ca.crt"
+      peerParams="--peerAddresses ${host}:7051 --tlsRootCertFiles crypto/peers/peer-0/tls/ca.crt"
     else
       peerParams+=" --peerAddresses ${host}:7051 --tlsRootCertFiles crypto/${FABRIC_ORG}/tlscacerts/tlsca.${FABRIC_ORG}-cert.pem"
     fi
@@ -1323,6 +1365,51 @@ function invokeChaincode {
   ORG=${FABRIC_ORG%%.*}
 
   execUtil "${CMD} ${CHANNEL_ID} ${CC_NAME} '${PARAM}' \"${peerParams}\""
+}
+
+# call orderer cli to add an orderer node to sys-channel
+function addOrderer {
+  if [ -z "${ORDERER_ENV}" ]; then
+    echo "orderer must be specified"
+    printHelp
+    exit 1
+  fi
+  if [ -z "${SEQN}" ]; then
+    echo "Invalid request: new orderer-seq must be specified"
+    printHelp
+    exit 1
+  fi
+
+  local chan=${CHANNEL_ID:-"${SYS_CHANNEL}"}
+  execUtil "${CMD} ${SEQN} ${chan}"
+}
+
+function addOrgTx {
+  if [ -z "${CHANNEL_ID}" ]; then
+    echo "App Channel to add the org must be specified"
+    printHelp
+    exit 1
+  fi
+  if [ -z "${NEW_ORG}" ]; then
+    echo "New org must be specified"
+    printHelp
+    exit 1
+  fi
+  if [ ! -f $(dirname "${SCRIPT_DIR}")/config/${NEW_ORG}.env ]; then
+    echo "Cannot find org config file $(dirname "${SCRIPT_DIR}")/config/${NEW_ORG}.env"
+    printHelp
+    exit 1
+  fi
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${NEW_ORG} ${ENV_TYPE}
+  local newMSP=${ORG_MSP}
+
+  if [ ${#PEER_ENVS[@]} -eq 0 ]; then
+    echo "Must specify a signing member org"
+    printHelp
+    exit 1
+  fi
+  source $(dirname "${SCRIPT_DIR}")/config/setup.sh ${PEER_ENVS[0]} ${ENV_TYPE}
+  execUtil "${CMD} ${newMSP} ${CHANNEL_ID}"
 }
 
 # Print the usage message
@@ -1351,14 +1438,14 @@ function printHelp() {
   echo "        e.g., network.sh query-chaincode -p org1 -n peer-0 -c mychannel -s mycc -m '{\"Args\":[\"query\",\"a\"]}'"
   echo "      - 'invoke-chaincode' - invoke chaincode from a peer, with arguments: -c <channel> -s <name> -m <args>"
   echo "        e.g., network.sh invoke-chaincode -p org1 -p org2 -c mychannel -s mycc -m '{\"Args\":[\"invoke\",\"a\",\"b\",\"10\"]}'"
-  echo "      - 'add-org-tx' - generate update tx for add new msp to a channel, with arguments: -o <msp> -c <channel>"
-  echo "        e.g., network.sh add-org-tx -o peerorg1MSP -c mychannel"
-  echo "      - 'add-orderer-tx' - generate update tx for add new orderers to a channel (default system-channel) for RAFT consensus, with argument: -f <consenter-file> [-c <channel>]"
-  echo "        e.g., network.sh add-orderer-tx -f ordererConfig-3.json"
+  echo "      - 'add-org-tx' - generate update tx for add new org to a channel, with arguments: -i <new-org> -c <channel>"
+  echo "        e.g., network.sh add-org-tx -p org1 -i org3 -c mychannel"
+  echo "      - 'add-orderer' - update sys-channel to add one more orderer node for RAFT consensus, with argument: -q <next orderer seq> [-c <sys-channel>]"
+  echo "        e.g., network.sh add-orderer-tx -o orderer -q 3"
   echo "      - 'sign-transaction' - sign a config update transaction file in the CLI working directory, with argument = -f <tx-file>"
-  echo "        e.g., network.sh sign-transaction -f \"mychannel-peerorg1MSP.pb\""
-  echo "      - 'update-channel' - send transaction to update a channel, with arguments ('-a' means orderer user): -f <tx-file> -c <channel> [-a]"
-  echo "        e.g., network.sh update-channel -f \"mychannel-peerorg1MSP.pb\" -c mychannel"
+  echo "        e.g., network.sh sign-transaction -p org1 -f \"mychannel-org3MSP.pb\""
+  echo "      - 'update-channel' - send transaction to update a channel, with arguments: -f <tx-file> -c <channel>"
+  echo "        e.g., network.sh update-channel -p org2 -f \"mychannel-org3MSP.pb\" -c mychannel"
   echo "    -o <orderer-org> - the .env file in config folder that defines orderer org, e.g., orderer (default)"
   echo "    -p <peer-orgs> - the .env file in config folder that defines peer org, e.g., org1"
   echo "    -t <env type> - deployment environment type: one of 'docker', 'k8s' (default), 'aws', or 'az'"
@@ -1372,10 +1459,10 @@ function printHelp() {
   echo "    -v <cc version> - chaincode version, default 1.0"
   echo "    -g <cc language> - chaincode language, default 'golang'"
   echo "    -k <cc package id> - chaincode package id"
-  echo "    -q <cc approve seq> - sequence for chaincode approval, default 1"
+  echo "    -q <seq number> - sequence for chaincode approval or additional orderer, default 1"
   echo "    -e <policy> - endorsement policy for instantiate/upgrade chaincode, e.g., \"OR ('Org1MSP.peer')\""
   echo "    -m <args> - args for chaincode commands"
-  echo "    -i <org msp> - org msp to be added to a channel"
+  echo "    -i <new-org> - new org to be added to a channel"
   echo "  network.sh -h (print this message)"
   echo "  Example:"
   echo "    ./network.sh start -t docker -o orderer -p org1 -p org2"
@@ -1431,7 +1518,7 @@ while getopts "h?o:p:t:r:n:c:f:s:v:g:k:q:e:m:i:ad" opt; do
     CC_PACKAGE=$OPTARG
     ;;
   q)
-    CC_SEQ=$OPTARG
+    SEQN=$OPTARG
     ;;
   e)
     POLICY=$OPTARG
@@ -1440,7 +1527,7 @@ while getopts "h?o:p:t:r:n:c:f:s:v:g:k:q:e:m:i:ad" opt; do
     PARAM=$OPTARG
     ;;
   i)
-    MSP=$OPTARG
+    NEW_ORG=$OPTARG
     ;;
   a)
     NEW="true"
@@ -1514,11 +1601,11 @@ install-chaincode)
   installChaincode "${PEER_ENVS[0]}"
   ;;
 approve-chaincode)
-  echo "approve chaincode: ${CHANNEL_ID} ${CC_PACKAGE} ${CC_NAME} [ ${CC_VERSION} ${CC_SEQ} ${CC_SRC} ${POLICY} ]"
+  echo "approve chaincode: ${CHANNEL_ID} ${CC_PACKAGE} ${CC_NAME} [ ${CC_VERSION} ${SEQN} ${CC_SRC} ${POLICY} ]"
   approveChaincode "${PEER_ENVS[0]}"
   ;;
 commit-chaincode)
-  echo "commit chaincode: ${CHANNEL_ID} ${CC_NAME} [ ${CC_VERSION} ${CC_SEQ} ${CC_SRC} ${POLICY} ]"
+  echo "commit chaincode: ${CHANNEL_ID} ${CC_NAME} [ ${CC_VERSION} ${SEQN} ${CC_SRC} ${POLICY} ]"
   commitChaincode ${PEER_ENVS[@]}
   ;;
 query-chaincode)
@@ -1530,25 +1617,12 @@ invoke-chaincode)
   invokeChaincode ${PEER_ENVS[@]}
   ;;
 add-org-tx)
-  echo "create channel update to add org: ${MSP} ${CHANNEL_ID}"
-  if [ -z "${MSP}" ] || [ -z "${CHANNEL_ID}" ]; then
-    echo "Invalid request: org MSP and channel must be specified"
-    printHelp
-    exit 1
-  fi
-  execUtil "${CMD} ${MSP} ${CHANNEL_ID}"
+  echo "create channel update to add org: ${NEW_ORG} ${CHANNEL_ID}"
+  addOrgTx
   ;;
-add-orderer-tx)
-  echo "create channel update to add orderer: ${CC_SRC} ${CHANNEL_ID}"
-  if [ -z "${CC_SRC}" ]; then
-    echo "Invalid request: new consenter config file must be specified"
-    printHelp
-    exit 1
-  fi
-  if [ -f "${DATA_ROOT}/tool/${CC_SRC}" ]; then
-    ${sucp} ${DATA_ROOT}/tool/${CC_SRC} ${DATA_ROOT}/cli
-  fi
-  execUtil "${CMD} ${CC_SRC} ${CHANNEL_ID}"
+add-orderer)
+  echo "create channel update to add orderer: ${SEQN} ${CHANNEL_ID}"
+  addOrderer
   ;;
 sign-transaction)
   if [ -z "${CC_SRC}" ]; then
@@ -1570,8 +1644,8 @@ update-channel)
     printUsage
     exit 2
   fi
-  echo "send transaction ${CC_SRC} to update channel ${CHANNEL_ID}, is-orderer: ${NEW}"
-  execUtil "${CMD} ${CC_SRC} ${CHANNEL_ID} ${NEW}"
+  echo "send transaction ${CC_SRC} to update channel ${CHANNEL_ID}"
+  execUtil "${CMD} ${CC_SRC} ${CHANNEL_ID}"
   ;;
 *)
   printHelp
